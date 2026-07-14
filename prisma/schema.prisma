@@ -1,0 +1,134 @@
+// Prisma schema for the inventory + invoicing app
+// This is a 1:1 translation of the AppSheet data model we designed earlier —
+// same six entities, same relationships, same tax/unit-conversion logic.
+//
+// Note on "virtual columns": AppSheet needed Current_Quantity, Subtotal,
+// GST_HST_Amount, PST_QST_Amount, Total, and Line_Total to be computed
+// on the fly because it couldn't safely keep stored derived values in sync.
+// In a real backend we get to do this properly: none of those are stored
+// columns here. They're computed in application code (see lib/calculations.ts,
+// built alongside the API routes) from the raw rows, straight from the source
+// of truth, every time. No sync bugs, no reset-on-edit gymnastics.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id                   String   @id @default(cuid())
+  sku                  String?
+  name                 String
+  description          String?
+  defaultPrice         Decimal  @db.Decimal(10, 2)
+  baseUnit             String // the unit you track & sell in, e.g. "bottle"
+  purchaseUnit         String? // the unit you receive in, e.g. "box" — null if same as baseUnit
+  unitsPerPurchaseUnit Int      @default(1) // e.g. 24 for a box of 24
+  reorderLevel         Int?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  stockTransactions StockTransaction[]
+  invoiceLineItems  InvoiceLineItem[]
+
+  @@index([isActive])
+}
+
+enum TxnType {
+  STOCK_IN
+  STOCK_OUT
+  ADJUSTMENT
+  SALE
+}
+
+enum EntryUnit {
+  BASE_UNIT
+  PURCHASE_UNIT
+}
+
+model StockTransaction {
+  id            String    @id @default(cuid())
+  productId     String
+  product       Product   @relation(fields: [productId], references: [id])
+  txnDate       DateTime  @default(now())
+  txnType       TxnType
+  entryUnit     EntryUnit @default(BASE_UNIT)
+  entryQuantity Int // always positive; sign + unit conversion applied in app code
+  reference     String? // e.g. invoice number, supplier name
+  notes         String?
+  createdAt     DateTime  @default(now())
+
+  @@index([productId])
+}
+
+// Reference table — seed once, rarely changes. See prisma/seed.ts
+model ProvinceTaxRate {
+  province    String  @id // AB, BC, MB, NB, NL, NS, NT, NU, ON, PE, QC, SK, YT
+  taxType     String // "GST only" | "GST + PST" | "HST" | "GST + QST"
+  gstHstRate  Decimal @db.Decimal(6, 5)
+  pstQstRate  Decimal @db.Decimal(6, 5)
+
+  customers Customer[]
+}
+
+model Customer {
+  id         String           @id @default(cuid())
+  name       String
+  phone      String?
+  email      String?
+  street     String?
+  city       String?
+  postalCode String?
+  provinceId String?
+  province   ProvinceTaxRate? @relation(fields: [provinceId], references: [province])
+  createdAt  DateTime         @default(now())
+
+  invoices Invoice[]
+
+  @@index([provinceId])
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+model Invoice {
+  id                 String        @id @default(cuid())
+  invoiceNumber      String        @unique
+  customerId         String
+  customer           Customer      @relation(fields: [customerId], references: [id])
+  invoiceDate        DateTime      @default(now())
+  dueDate            DateTime?
+  paymentStatus      PaymentStatus @default(UNPAID)
+  otherChargesLabel  String? // e.g. "Freight" — null if not used on this invoice
+  otherChargesAmount Decimal       @default(0) @db.Decimal(10, 2)
+  footerNote         String? // e.g. retention-of-title clause — varies per invoice in the reference PDFs
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  lineItems InvoiceLineItem[]
+
+  @@index([customerId])
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
+  activity    String // e.g. "Grease-Pail", "Grease-Tube (400gm)" — defaults from product, editable
+  description String // e.g. "Hector EP''0'' (16Kg)" — defaults from product, freely editable per invoice
+  unitPrice   Decimal  @db.Decimal(10, 2) // defaults from product, freely editable per invoice
+  quantity    Int
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
+}
