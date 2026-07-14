@@ -24,6 +24,7 @@ model Product {
   sku                  String?
   name                 String
   description          String?
+  defaultActivity      String? // e.g. "Grease-Pail", "Grease-Tube (400gm)" — defaults line items' Activity field
   defaultPrice         Decimal  @db.Decimal(10, 2)
   baseUnit             String // the unit you track & sell in, e.g. "bottle"
   purchaseUnit         String? // the unit you receive in, e.g. "box" — null if same as baseUnit

@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       sku: body.sku ?? null,
       name: body.name,
       description: body.description ?? null,
+      defaultActivity: body.defaultActivity ?? null,
       defaultPrice: body.defaultPrice,
       baseUnit: body.baseUnit,
       purchaseUnit: body.purchaseUnit ?? null,
