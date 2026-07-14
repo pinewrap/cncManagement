@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription } from "@/lib/calculations";
+import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel } from "@/lib/calculations";
 import { generateInvoicePdf } from "@/lib/pdf";
 
 type Province = { province: string; taxType: string; gstHstRate: string; pstQstRate: string };
@@ -27,6 +27,7 @@ type Product = {
   defaultPrice: string | null;
 };
 type LineItem = {
+  lineKey: string;
   productId: string;
   activity: string;
   description: string;
@@ -34,7 +35,14 @@ type LineItem = {
   quantity: string;
 };
 
-const emptyLine: LineItem = { productId: "", activity: "", description: "", unitPrice: "", quantity: "1" };
+const emptyLine: LineItem = {
+  lineKey: "",
+  productId: "",
+  activity: "",
+  description: "",
+  unitPrice: "",
+  quantity: "1",
+};
 const emptyCustomerForm = {
   name: "",
   phone: "",
@@ -80,7 +88,13 @@ export default function NewInvoicePage() {
     setLineItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
   }
 
-  function handleProductPick(index: number, productId: string) {
+  const productLines = groupProductLines(products);
+
+  function handleLinePick(index: number, lineKey: string) {
+    updateLine(index, { lineKey, productId: "", activity: "", description: "", unitPrice: "" });
+  }
+
+  function handlePackagePick(index: number, productId: string) {
     const product = products.find((p) => p.id === productId);
     updateLine(index, {
       productId,
@@ -304,17 +318,32 @@ export default function NewInvoicePage() {
       <section className="rounded-lg border bg-white p-4">
         <h2 className="mb-2 font-medium">Line items</h2>
         <div className="flex flex-col gap-3">
-          {lineItems.map((line, i) => (
+          {lineItems.map((line, i) => {
+            const selectedLine = productLines.find((l) => l.key === line.lineKey);
+            return (
             <div key={i} className="grid gap-2 rounded border p-3 sm:grid-cols-6">
               <select
                 className="rounded border px-2 py-1.5 text-sm sm:col-span-2"
-                value={line.productId}
-                onChange={(e) => handleProductPick(i, e.target.value)}
+                value={line.lineKey}
+                onChange={(e) => handleLinePick(i, e.target.value)}
               >
-                <option value="">Custom / no product...</option>
-                {products.map((p) => (
+                <option value="">1. Select product...</option>
+                {productLines.map((l) => (
+                  <option key={l.key} value={l.key}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="rounded border px-2 py-1.5 text-sm disabled:bg-gray-100"
+                disabled={!selectedLine}
+                value={line.productId}
+                onChange={(e) => handlePackagePick(i, e.target.value)}
+              >
+                <option value="">2. Select package...</option>
+                {selectedLine?.products.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}
+                    {packageLabel(p)}
                   </option>
                 ))}
               </select>
@@ -326,7 +355,7 @@ export default function NewInvoicePage() {
               />
               <input
                 placeholder="Description"
-                className="rounded border px-2 py-1.5 text-sm sm:col-span-2"
+                className="rounded border px-2 py-1.5 text-sm"
                 value={line.description}
                 onChange={(e) => updateLine(i, { description: e.target.value })}
               />
@@ -357,7 +386,8 @@ export default function NewInvoicePage() {
                 Remove
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
         <button
           className="mt-3 text-sm text-brand underline"

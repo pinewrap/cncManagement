@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { groupProductLines, packageLabel } from "@/lib/calculations";
 
 type Product = {
   id: string;
   name: string;
+  variant: string | null;
   packageType: string | null;
-  unitsPerBox: number | null;
-  boxesPerSkid: number | null;
+  packageSize: string | null;
   unit: string;
 };
 type Txn = {
@@ -21,9 +22,10 @@ type Txn = {
 };
 
 const emptyForm = {
+  lineKey: "",
   productId: "",
   txnType: "STOCK_IN",
-  entryUnit: "BASE_UNIT",
+  entryUnit: "PACKAGE",
   entryQuantity: "",
   reference: "",
   notes: "",
@@ -48,6 +50,8 @@ export default function StockPage() {
     load();
   }, []);
 
+  const lines = groupProductLines(products);
+  const selectedLine = lines.find((l) => l.key === form.lineKey);
   const selectedProduct = products.find((p) => p.id === form.productId);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -78,13 +82,28 @@ export default function StockPage() {
         <select
           required
           className="rounded border px-3 py-2"
-          value={form.productId}
-          onChange={(e) => setForm({ ...form, productId: e.target.value, entryUnit: "BASE_UNIT" })}
+          value={form.lineKey}
+          onChange={(e) => setForm({ ...form, lineKey: e.target.value, productId: "" })}
         >
-          <option value="">Select product...</option>
-          {products.map((p) => (
+          <option value="">1. Select product...</option>
+          {lines.map((l) => (
+            <option key={l.key} value={l.key}>
+              {l.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          required
+          disabled={!selectedLine}
+          className="rounded border px-3 py-2 disabled:bg-gray-100"
+          value={form.productId}
+          onChange={(e) => setForm({ ...form, productId: e.target.value })}
+        >
+          <option value="">2. Select package...</option>
+          {selectedLine?.products.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name}
+              {packageLabel(p)}
             </option>
           ))}
         </select>
@@ -94,7 +113,7 @@ export default function StockPage() {
           value={form.txnType}
           onChange={(e) => setForm({ ...form, txnType: e.target.value })}
         >
-          <option value="STOCK_IN">Stock In</option>
+          <option value="STOCK_IN">Stock In (received)</option>
           <option value="STOCK_OUT">Stock Out</option>
           <option value="ADJUSTMENT">Adjustment</option>
         </select>
@@ -104,24 +123,22 @@ export default function StockPage() {
           value={form.entryUnit}
           onChange={(e) => setForm({ ...form, entryUnit: e.target.value })}
         >
-          <option value="BASE_UNIT">{selectedProduct ? `Base unit (${selectedProduct.unit})` : "Base unit"}</option>
-          {selectedProduct?.packageType && (
-            <option value="PACKAGE">{selectedProduct.packageType} (package)</option>
-          )}
-          {selectedProduct?.packageType && selectedProduct.unitsPerBox && (
-            <option value="BOX">Box (of {selectedProduct.unitsPerBox} {selectedProduct.packageType.toLowerCase()}s)</option>
-          )}
-          {selectedProduct?.packageType && selectedProduct.unitsPerBox && selectedProduct.boxesPerSkid && (
-            <option value="SKID">Skid (of {selectedProduct.boxesPerSkid} boxes)</option>
-          )}
+          <option value="PACKAGE">
+            By the {selectedProduct?.packageType?.toLowerCase() ?? "package"}
+          </option>
+          <option value="BASE_UNIT">By the {selectedProduct?.unit ?? "unit"} (partial package)</option>
         </select>
 
         <input
           required
           type="number"
           step="0.001"
-          placeholder="Quantity"
-          className="rounded border px-3 py-2"
+          placeholder={
+            form.entryUnit === "PACKAGE"
+              ? `How many ${selectedProduct?.packageType?.toLowerCase() ?? "packages"}?`
+              : `How many ${selectedProduct?.unit ?? "units"}?`
+          }
+          className="rounded border px-3 py-2 sm:col-span-2"
           value={form.entryQuantity}
           onChange={(e) => setForm({ ...form, entryQuantity: e.target.value })}
         />
@@ -162,10 +179,12 @@ export default function StockPage() {
           {transactions.map((t) => (
             <tr key={t.id} className="border-t">
               <td className="p-3">{new Date(t.txnDate).toLocaleDateString()}</td>
-              <td className="p-3">{t.product.name}</td>
+              <td className="p-3">
+                {t.product.name} {t.product.variant} — {packageLabel(t.product)}
+              </td>
               <td className="p-3">{t.txnType}</td>
               <td className="p-3">{t.entryQuantity}</td>
-              <td className="p-3">{t.entryUnit}</td>
+              <td className="p-3">{t.entryUnit === "PACKAGE" ? t.product.packageType : t.product.unit}</td>
               <td className="p-3 text-gray-500">{t.reference ?? "-"}</td>
             </tr>
           ))}

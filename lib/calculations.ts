@@ -45,6 +45,40 @@ export function currentQuantity(transactions: StockTxn[], factors: PackagingFact
   }, 0);
 }
 
+type ProductForGrouping = {
+  id: string;
+  name: string;
+  variant?: string | null;
+  packageType?: string | null;
+  packageSize?: Decimal | number | string | null;
+  unit: string;
+};
+
+export type ProductLine = {
+  key: string;
+  label: string;
+  products: ProductForGrouping[];
+};
+
+/** Groups individual SKUs (Product rows) into the product lines a non-technical user picks from first. */
+export function groupProductLines(products: ProductForGrouping[]): ProductLine[] {
+  const map = new Map<string, ProductLine>();
+  for (const p of products) {
+    const key = `${p.name}__${p.variant ?? ""}`;
+    const label = [p.name, p.variant].filter(Boolean).join(" ");
+    if (!map.has(key)) map.set(key, { key, label, products: [] });
+    map.get(key)!.products.push(p);
+  }
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** e.g. "Drum - 181.4kg" — the second dropdown, scoped to whichever product line was picked. */
+export function packageLabel(p: { packageType?: string | null; packageSize?: Decimal | number | string | null; unit: string }): string {
+  if (!p.packageType) return p.unit;
+  const size = p.packageSize != null ? `${Number(p.packageSize)}${p.unit}` : p.unit;
+  return `${p.packageType} - ${size}`;
+}
+
 type ProductForDisplay = {
   name: string;
   variant?: string | null;

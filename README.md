@@ -63,16 +63,20 @@ runs.
 
 ## Product catalog
 
-Products now match CNC's real structure: `sku` (Product ID), `name`, `variant`,
-`packageType` (Drum/Keg/Bucket/Pack/Jug/Tank), `packageSize` (quantity of
-`unit` per package), `unit` (KG/L), and optional `unitsPerBox`/`boxesPerSkid`
-for products sold up to a box or skid level. Price is intentionally **not**
-set when adding a product — it's decided per invoice, never at the catalog
-level. Stock is entered at any of four levels (base unit, package, box, skid)
-and converted down to base units automatically — see `lib/calculations.ts`.
+The catalog is now **fixed and curated** — there is no "add product" UI in
+the app at all, since the client isn't technical and typing raw package
+fields (type/size/unit) was confusing. All 31 real SKUs across 8 product
+lines (Eligate Red Gel, Ocean Blue Gel, Automatic Grease Hector EP0/EP00,
+Gear Oil 75W90/80W90, ATF Steering Fluid DIII, Coolant, Washer Fluid) live in
+`prisma/products-seed-data.ts` and load via `npx prisma db seed`.
 
-The real 30-product catalog is in `prisma/products-seed-data.ts` and gets
-loaded by `npx prisma db seed` alongside the province tax rates.
+To add or change a product line, edit that file and re-run the seed command
+— it's safe to re-run anytime (upserts by `sku`).
+
+Both the Stock page and the Invoice builder use a **two-step cascading
+dropdown**: pick the product line first (e.g. "Automatic Grease Hector
+EP0"), then pick the package (e.g. "Keg - 50kg") — no free text, no manual
+package/size entry anywhere in the day-to-day flow.
 
 ## Not built yet
 
