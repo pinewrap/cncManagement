@@ -11,7 +11,11 @@ export async function GET() {
 
   const withQuantity = products.map(({ stockTransactions, ...product }) => ({
     ...product,
-    currentQuantity: currentQuantity(stockTransactions, product.unitsPerPurchaseUnit),
+    currentQuantity: currentQuantity(stockTransactions, {
+      packageSize: product.packageSize,
+      unitsPerBox: product.unitsPerBox,
+      boxesPerSkid: product.boxesPerSkid,
+    }),
   }));
 
   return NextResponse.json(withQuantity);
@@ -24,13 +28,16 @@ export async function POST(req: NextRequest) {
     data: {
       sku: body.sku ?? null,
       name: body.name,
+      variant: body.variant ?? null,
       description: body.description ?? null,
-      defaultActivity: body.defaultActivity ?? null,
-      defaultPrice: body.defaultPrice,
-      baseUnit: body.baseUnit,
-      purchaseUnit: body.purchaseUnit ?? null,
-      unitsPerPurchaseUnit: body.unitsPerPurchaseUnit ?? 1,
+      packageType: body.packageType ?? null,
+      packageSize: body.packageSize ?? null,
+      unit: body.unit,
+      unitsPerBox: body.unitsPerBox ?? null,
+      boxesPerSkid: body.boxesPerSkid ?? null,
       reorderLevel: body.reorderLevel ?? null,
+      // defaultPrice is intentionally not set here — price is decided per
+      // invoice, never at the product/catalog level.
     },
   });
 

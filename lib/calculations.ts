@@ -2,29 +2,75 @@ import { Decimal } from "@prisma/client/runtime/library";
 
 type StockTxn = {
   txnType: "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT" | "SALE";
-  entryUnit: "BASE_UNIT" | "PURCHASE_UNIT";
-  entryQuantity: number;
+  entryUnit: "BASE_UNIT" | "PACKAGE" | "BOX" | "SKID";
+  entryQuantity: Decimal | number;
 };
 
-/** Current stock, in base units, from a product's full transaction history. */
-export function currentQuantity(
-  transactions: StockTxn[],
-  unitsPerPurchaseUnit: number
-): number {
+type PackagingFactors = {
+  packageSize: Decimal | number | null;
+  unitsPerBox: number | null;
+  boxesPerSkid: number | null;
+};
+
+/**
+ * How many base units (KG/L) one unit of the given entry tier represents.
+ * PACKAGE = packageSize. BOX = packageSize * unitsPerBox.
+ * SKID = packageSize * unitsPerBox * boxesPerSkid.
+ * Falls back to 1 for any missing factor rather than throwing — a product
+ * without box/skid tiers simply can't be entered at that level in the UI.
+ */
+export function conversionFactor(entryUnit: StockTxn["entryUnit"], factors: PackagingFactors): number {
+  const packageSize = Number(factors.packageSize ?? 1);
+  const unitsPerBox = factors.unitsPerBox ?? 1;
+  const boxesPerSkid = factors.boxesPerSkid ?? 1;
+
+  switch (entryUnit) {
+    case "BASE_UNIT":
+      return 1;
+    case "PACKAGE":
+      return packageSize;
+    case "BOX":
+      return packageSize * unitsPerBox;
+    case "SKID":
+      return packageSize * unitsPerBox * boxesPerSkid;
+  }
+}
+
+/** Current stock, in base units (KG/L), from a product's full transaction history. */
+export function currentQuantity(transactions: StockTxn[], factors: PackagingFactors): number {
   return transactions.reduce((total, txn) => {
-    const baseQty =
-      txn.entryUnit === "PURCHASE_UNIT"
-        ? txn.entryQuantity * unitsPerPurchaseUnit
-        : txn.entryQuantity;
+    const baseQty = Number(txn.entryQuantity) * conversionFactor(txn.entryUnit, factors);
     const sign = txn.txnType === "STOCK_OUT" || txn.txnType === "SALE" ? -1 : 1;
     return total + sign * baseQty;
   }, 0);
 }
 
-type LineItem = { unitPrice: Decimal | number; quantity: number };
+type ProductForDisplay = {
+  name: string;
+  variant?: string | null;
+  packageType?: string | null;
+  packageSize?: Decimal | number | string | null;
+  unit: string;
+  description?: string | null;
+};
+
+/** e.g. "Drum (181.4KG)" — matches the Activity column on CNC's real invoices. */
+export function deriveActivity(product: ProductForDisplay): string {
+  if (!product.packageType) return "";
+  const size = product.packageSize != null ? `${Number(product.packageSize)}${product.unit}` : product.unit;
+  return `${product.packageType} (${size})`;
+}
+
+/** e.g. "Hector Grease 4" — falls back to name+variant unless the product has an explicit override. */
+export function deriveDescription(product: ProductForDisplay): string {
+  if (product.description) return product.description;
+  return [product.name, product.variant].filter(Boolean).join(" ");
+}
+
+type LineItem = { unitPrice: Decimal | number; quantity: Decimal | number };
 
 export function lineTotal(item: LineItem): number {
-  return Number(item.unitPrice) * item.quantity;
+  return Number(item.unitPrice) * Number(item.quantity);
 }
 
 export function subtotal(lineItems: LineItem[]): number {

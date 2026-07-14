@@ -19,7 +19,7 @@ type InvoiceListItem = {
     postalCode: string | null;
     province: { province: string; gstHstRate: string; pstQstRate: string } | null;
   };
-  lineItems: { activity: string; description: string; quantity: number; unitPrice: string }[];
+  lineItems: { activity: string; description: string; quantity: string; unitPrice: string }[];
   taxLabel: string | null;
   subtotal: number;
   otherChargesAmount: number;
@@ -49,6 +49,7 @@ export default function InvoicesPage() {
       customer: inv.customer,
       lineItems: inv.lineItems.map((li) => ({
         ...li,
+        quantity: Number(li.quantity),
         unitPrice: Number(li.unitPrice),
       })),
       taxLabel: inv.taxLabel,

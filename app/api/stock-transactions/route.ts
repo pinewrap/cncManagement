@@ -16,15 +16,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const body = await req.json();
 
-  // entryQuantity is always positive; sign + unit conversion is applied at
-  // read-time in lib/calculations.ts, not stored here — same principle as
-  // the rest of the schema: store raw facts, compute derived values on read.
+  // entryQuantity is always positive; sign + packaging-tier conversion is
+  // applied at read-time in lib/calculations.ts, not stored here — same
+  // principle as the rest of the schema: store raw facts, compute derived
+  // values on read.
   const txn = await prisma.stockTransaction.create({
     data: {
       productId: body.productId,
       txnDate: body.txnDate ? new Date(body.txnDate) : new Date(),
       txnType: body.txnType, // "STOCK_IN" | "STOCK_OUT" | "ADJUSTMENT" | "SALE"
-      entryUnit: body.entryUnit ?? "BASE_UNIT", // "BASE_UNIT" | "PURCHASE_UNIT"
+      entryUnit: body.entryUnit ?? "BASE_UNIT", // "BASE_UNIT" | "PACKAGE" | "BOX" | "SKID"
       entryQuantity: body.entryQuantity,
       reference: body.reference ?? null,
       notes: body.notes ?? null,

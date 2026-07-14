@@ -20,19 +20,21 @@ datasource db {
 }
 
 model Product {
-  id                   String   @id @default(cuid())
-  sku                  String?
-  name                 String
-  description          String?
-  defaultActivity      String? // e.g. "Grease-Pail", "Grease-Tube (400gm)" — defaults line items' Activity field
-  defaultPrice         Decimal  @db.Decimal(10, 2)
-  baseUnit             String // the unit you track & sell in, e.g. "bottle"
-  purchaseUnit         String? // the unit you receive in, e.g. "box" — null if same as baseUnit
-  unitsPerPurchaseUnit Int      @default(1) // e.g. 24 for a box of 24
-  reorderLevel         Int?
-  isActive             Boolean  @default(true)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id             String   @id @default(cuid())
+  sku            String?  @unique // e.g. "ELG-181.4-DRUM" — the product code
+  name           String // e.g. "Eligate Gel", "Hector Grease"
+  variant        String? // e.g. "4", "5", "75W90", "D3" — null if product has no variant
+  description    String? // optional override for invoice line description; usually name+variant is enough
+  packageType    String? // e.g. "Drum", "Keg", "Bucket", "Pack", "Jug", "Tank"
+  packageSize    Decimal? @db.Decimal(10, 3) // quantity of `unit` per package, e.g. 181.4
+  unit           String // the unit the product is measured/sold in, e.g. "KG", "L"
+  unitsPerBox    Int? // packages per box, e.g. 4 jugs per box — null if not sold by the box
+  boxesPerSkid   Int? // boxes per skid, e.g. 65 — null if not sold by the skid
+  defaultPrice   Decimal? @db.Decimal(10, 2) // intentionally optional — price is set per invoice, not per product
+  reorderLevel   Decimal? @db.Decimal(10, 2) // in base `unit` terms
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   stockTransactions StockTransaction[]
   invoiceLineItems  InvoiceLineItem[]
@@ -47,9 +49,14 @@ enum TxnType {
   SALE
 }
 
+// The four levels of the packaging hierarchy a quantity can be entered in.
+// Conversion to base units: PACKAGE = packageSize, BOX = packageSize * unitsPerBox,
+// SKID = packageSize * unitsPerBox * boxesPerSkid. See lib/calculations.ts.
 enum EntryUnit {
   BASE_UNIT
-  PURCHASE_UNIT
+  PACKAGE
+  BOX
+  SKID
 }
 
 model StockTransaction {
@@ -59,7 +66,7 @@ model StockTransaction {
   txnDate       DateTime  @default(now())
   txnType       TxnType
   entryUnit     EntryUnit @default(BASE_UNIT)
-  entryQuantity Int // always positive; sign + unit conversion applied in app code
+  entryQuantity Decimal   @db.Decimal(12, 3) // always positive; sign + package-tier conversion applied in app code
   reference     String? // e.g. invoice number, supplier name
   notes         String?
   createdAt     DateTime  @default(now())
@@ -125,10 +132,10 @@ model InvoiceLineItem {
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId   String?
   product     Product? @relation(fields: [productId], references: [id])
-  activity    String // e.g. "Grease-Pail", "Grease-Tube (400gm)" — defaults from product, editable
-  description String // e.g. "Hector EP''0'' (16Kg)" — defaults from product, freely editable per invoice
-  unitPrice   Decimal  @db.Decimal(10, 2) // defaults from product, freely editable per invoice
-  quantity    Int
+  activity    String // e.g. "Drum (181.4KG)" — derived from product's package info, editable
+  description String // e.g. "Eligate Gel" — defaults from product name+variant, freely editable per invoice
+  unitPrice   Decimal  @db.Decimal(10, 2) // set per invoice — products intentionally have no fixed price
+  quantity    Decimal  @db.Decimal(12, 3)
   createdAt   DateTime @default(now())
 
   @@index([invoiceId])

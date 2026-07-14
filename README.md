@@ -61,6 +61,19 @@ runs.
   ISR, streaming, full edge middleware) — none of which this app uses, so
   it's a non-issue here.
 
+## Product catalog
+
+Products now match CNC's real structure: `sku` (Product ID), `name`, `variant`,
+`packageType` (Drum/Keg/Bucket/Pack/Jug/Tank), `packageSize` (quantity of
+`unit` per package), `unit` (KG/L), and optional `unitsPerBox`/`boxesPerSkid`
+for products sold up to a box or skid level. Price is intentionally **not**
+set when adding a product — it's decided per invoice, never at the catalog
+level. Stock is entered at any of four levels (base unit, package, box, skid)
+and converted down to base units automatically — see `lib/calculations.ts`.
+
+The real 30-product catalog is in `prisma/products-seed-data.ts` and gets
+loaded by `npx prisma db seed` alongside the province tax rates.
+
 ## Not built yet
 
 - Actual UI pages (Inventory, Stock entry, Invoice builder — reusing the

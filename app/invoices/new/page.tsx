@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { invoiceTotals, taxLabel as getTaxLabel } from "@/lib/calculations";
+import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription } from "@/lib/calculations";
 import { generateInvoicePdf } from "@/lib/pdf";
 
 type Province = { province: string; taxType: string; gstHstRate: string; pstQstRate: string };
@@ -19,9 +19,12 @@ type Customer = {
 type Product = {
   id: string;
   name: string;
+  variant: string | null;
   description: string | null;
-  defaultActivity: string | null;
-  defaultPrice: string;
+  packageType: string | null;
+  packageSize: string | null;
+  unit: string;
+  defaultPrice: string | null;
 };
 type LineItem = {
   productId: string;
@@ -81,9 +84,9 @@ export default function NewInvoicePage() {
     const product = products.find((p) => p.id === productId);
     updateLine(index, {
       productId,
-      activity: product?.defaultActivity ?? "",
-      description: product?.description ?? "",
-      unitPrice: product ? String(product.defaultPrice) : "",
+      activity: product ? deriveActivity(product) : "",
+      description: product ? deriveDescription(product) : "",
+      unitPrice: product?.defaultPrice ? String(product.defaultPrice) : "",
     });
   }
 
@@ -114,7 +117,7 @@ export default function NewInvoicePage() {
   // between what you see here and what gets saved.
   const numericLineItems = lineItems
     .filter((li) => li.unitPrice && li.quantity)
-    .map((li) => ({ unitPrice: parseFloat(li.unitPrice) || 0, quantity: parseInt(li.quantity, 10) || 0 }));
+    .map((li) => ({ unitPrice: parseFloat(li.unitPrice) || 0, quantity: parseFloat(li.quantity) || 0 }));
   const rates = selectedCustomer?.province;
   const totals = invoiceTotals(
     numericLineItems,
@@ -150,7 +153,7 @@ export default function NewInvoicePage() {
           activity: li.activity,
           description: li.description,
           unitPrice: parseFloat(li.unitPrice),
-          quantity: parseInt(li.quantity, 10),
+          quantity: parseFloat(li.quantity),
         })),
       }),
     });
@@ -163,7 +166,11 @@ export default function NewInvoicePage() {
       invoiceDate: new Date(invoice.invoiceDate).toLocaleDateString("en-CA"),
       dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-CA") : null,
       customer: invoice.customer,
-      lineItems: invoice.lineItems.map((li: any) => ({ ...li, unitPrice: Number(li.unitPrice) })),
+      lineItems: invoice.lineItems.map((li: any) => ({
+        ...li,
+        quantity: Number(li.quantity),
+        unitPrice: Number(li.unitPrice),
+      })),
       taxLabel: invoice.taxLabel,
       gstHstRateDisplay: rates ? `${(Number(rates.gstHstRate) * 100).toFixed(0)}%` : "0%",
       pstQstRateDisplay:
@@ -333,6 +340,7 @@ export default function NewInvoicePage() {
               />
               <input
                 type="number"
+                step="0.001"
                 placeholder="Qty"
                 className="rounded border px-2 py-1.5 text-sm"
                 value={line.quantity}
@@ -340,7 +348,7 @@ export default function NewInvoicePage() {
               />
               <div className="flex items-center justify-between text-sm text-gray-500 sm:col-span-5">
                 Line total: $
-                {((parseFloat(line.unitPrice) || 0) * (parseInt(line.quantity, 10) || 0)).toFixed(2)}
+                {((parseFloat(line.unitPrice) || 0) * (parseFloat(line.quantity) || 0)).toFixed(2)}
               </div>
               <button
                 className="text-sm text-red-600 underline"

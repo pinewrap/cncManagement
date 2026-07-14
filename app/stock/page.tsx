@@ -2,13 +2,20 @@
 
 import { useEffect, useState } from "react";
 
-type Product = { id: string; name: string; baseUnit: string; purchaseUnit: string | null };
+type Product = {
+  id: string;
+  name: string;
+  packageType: string | null;
+  unitsPerBox: number | null;
+  boxesPerSkid: number | null;
+  unit: string;
+};
 type Txn = {
   id: string;
   txnDate: string;
   txnType: string;
   entryUnit: string;
-  entryQuantity: number;
+  entryQuantity: string;
   reference: string | null;
   product: Product;
 };
@@ -53,7 +60,7 @@ export default function StockPage() {
         productId: form.productId,
         txnType: form.txnType,
         entryUnit: form.entryUnit,
-        entryQuantity: parseInt(form.entryQuantity, 10),
+        entryQuantity: parseFloat(form.entryQuantity),
         reference: form.reference || undefined,
         notes: form.notes || undefined,
       }),
@@ -72,7 +79,7 @@ export default function StockPage() {
           required
           className="rounded border px-3 py-2"
           value={form.productId}
-          onChange={(e) => setForm({ ...form, productId: e.target.value })}
+          onChange={(e) => setForm({ ...form, productId: e.target.value, entryUnit: "BASE_UNIT" })}
         >
           <option value="">Select product...</option>
           {products.map((p) => (
@@ -97,17 +104,22 @@ export default function StockPage() {
           value={form.entryUnit}
           onChange={(e) => setForm({ ...form, entryUnit: e.target.value })}
         >
-          <option value="BASE_UNIT">
-            {selectedProduct ? `Base unit (${selectedProduct.baseUnit})` : "Base unit"}
-          </option>
-          {selectedProduct?.purchaseUnit && (
-            <option value="PURCHASE_UNIT">Purchase unit ({selectedProduct.purchaseUnit})</option>
+          <option value="BASE_UNIT">{selectedProduct ? `Base unit (${selectedProduct.unit})` : "Base unit"}</option>
+          {selectedProduct?.packageType && (
+            <option value="PACKAGE">{selectedProduct.packageType} (package)</option>
+          )}
+          {selectedProduct?.packageType && selectedProduct.unitsPerBox && (
+            <option value="BOX">Box (of {selectedProduct.unitsPerBox} {selectedProduct.packageType.toLowerCase()}s)</option>
+          )}
+          {selectedProduct?.packageType && selectedProduct.unitsPerBox && selectedProduct.boxesPerSkid && (
+            <option value="SKID">Skid (of {selectedProduct.boxesPerSkid} boxes)</option>
           )}
         </select>
 
         <input
           required
           type="number"
+          step="0.001"
           placeholder="Quantity"
           className="rounded border px-3 py-2"
           value={form.entryQuantity}
@@ -142,7 +154,7 @@ export default function StockPage() {
             <th className="p-3">Product</th>
             <th className="p-3">Type</th>
             <th className="p-3">Qty entered</th>
-            <th className="p-3">Unit</th>
+            <th className="p-3">Level</th>
             <th className="p-3">Reference</th>
           </tr>
         </thead>
@@ -153,7 +165,7 @@ export default function StockPage() {
               <td className="p-3">{t.product.name}</td>
               <td className="p-3">{t.txnType}</td>
               <td className="p-3">{t.entryQuantity}</td>
-              <td className="p-3">{t.entryUnit === "PURCHASE_UNIT" ? "purchase unit" : "base unit"}</td>
+              <td className="p-3">{t.entryUnit}</td>
               <td className="p-3 text-gray-500">{t.reference ?? "-"}</td>
             </tr>
           ))}

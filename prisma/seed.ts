@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { products } from "./products-seed-data";
 
 const prisma = new PrismaClient();
 
@@ -29,6 +30,15 @@ async function main() {
     });
   }
   console.log(`Seeded ${provinces.length} provinces.`);
+
+  for (const p of products) {
+    await prisma.product.upsert({
+      where: { sku: p.sku },
+      update: p,
+      create: p,
+    });
+  }
+  console.log(`Seeded ${products.length} products.`);
 }
 
 main()

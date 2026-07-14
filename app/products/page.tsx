@@ -1,27 +1,31 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { deriveActivity, deriveDescription } from "@/lib/calculations";
 
 type Product = {
   id: string;
   sku: string | null;
   name: string;
-  defaultPrice: string;
-  baseUnit: string;
-  purchaseUnit: string | null;
-  unitsPerPurchaseUnit: number;
-  reorderLevel: number | null;
+  variant: string | null;
+  packageType: string | null;
+  packageSize: string | null;
+  unit: string;
+  unitsPerBox: number | null;
+  boxesPerSkid: number | null;
+  reorderLevel: string | null;
   currentQuantity: number;
 };
 
 const emptyForm = {
-  name: "",
   sku: "",
-  defaultActivity: "",
-  defaultPrice: "",
-  baseUnit: "",
-  purchaseUnit: "",
-  unitsPerPurchaseUnit: "1",
+  name: "",
+  variant: "",
+  packageType: "",
+  packageSize: "",
+  unit: "",
+  unitsPerBox: "",
+  boxesPerSkid: "",
   reorderLevel: "",
 };
 
@@ -50,14 +54,15 @@ export default function ProductsPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: form.name,
         sku: form.sku || undefined,
-        defaultActivity: form.defaultActivity || undefined,
-        defaultPrice: parseFloat(form.defaultPrice),
-        baseUnit: form.baseUnit,
-        purchaseUnit: form.purchaseUnit || undefined,
-        unitsPerPurchaseUnit: parseInt(form.unitsPerPurchaseUnit, 10) || 1,
-        reorderLevel: form.reorderLevel ? parseInt(form.reorderLevel, 10) : undefined,
+        name: form.name,
+        variant: form.variant || undefined,
+        packageType: form.packageType || undefined,
+        packageSize: form.packageSize ? parseFloat(form.packageSize) : undefined,
+        unit: form.unit,
+        unitsPerBox: form.unitsPerBox ? parseInt(form.unitsPerBox, 10) : undefined,
+        boxesPerSkid: form.boxesPerSkid ? parseInt(form.boxesPerSkid, 10) : undefined,
+        reorderLevel: form.reorderLevel ? parseFloat(form.reorderLevel) : undefined,
       }),
     });
     setSaving(false);
@@ -79,65 +84,72 @@ export default function ProductsPage() {
       </div>
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
+        <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-4">
           <input
-            required
-            placeholder="Product name"
-            className="rounded border px-3 py-2"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <input
-            placeholder="SKU (optional)"
-            className="rounded border px-3 py-2"
+            placeholder="Product ID (e.g. ELG-181.4-DRUM)"
+            className="rounded border px-3 py-2 sm:col-span-2"
             value={form.sku}
             onChange={(e) => setForm({ ...form, sku: e.target.value })}
           />
           <input
-            placeholder="Default activity (e.g. Grease-Pail)"
+            required
+            placeholder="Product name"
+            className="rounded border px-3 py-2 sm:col-span-2"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
+          <input
+            placeholder="Variant (e.g. 75W90, D3) — optional"
             className="rounded border px-3 py-2"
-            value={form.defaultActivity}
-            onChange={(e) => setForm({ ...form, defaultActivity: e.target.value })}
+            value={form.variant}
+            onChange={(e) => setForm({ ...form, variant: e.target.value })}
+          />
+          <input
+            placeholder="Package type (Drum, Keg, Bucket...)"
+            className="rounded border px-3 py-2"
+            value={form.packageType}
+            onChange={(e) => setForm({ ...form, packageType: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.001"
+            placeholder="Package size (e.g. 181.4)"
+            className="rounded border px-3 py-2"
+            value={form.packageSize}
+            onChange={(e) => setForm({ ...form, packageSize: e.target.value })}
           />
           <input
             required
-            type="number"
-            step="0.01"
-            placeholder="Default price"
+            placeholder="Unit (KG, L)"
             className="rounded border px-3 py-2"
-            value={form.defaultPrice}
-            onChange={(e) => setForm({ ...form, defaultPrice: e.target.value })}
-          />
-          <input
-            required
-            placeholder="Base unit (e.g. bottle, pail)"
-            className="rounded border px-3 py-2"
-            value={form.baseUnit}
-            onChange={(e) => setForm({ ...form, baseUnit: e.target.value })}
-          />
-          <input
-            placeholder="Purchase unit (e.g. box) — optional"
-            className="rounded border px-3 py-2"
-            value={form.purchaseUnit}
-            onChange={(e) => setForm({ ...form, purchaseUnit: e.target.value })}
+            value={form.unit}
+            onChange={(e) => setForm({ ...form, unit: e.target.value })}
           />
           <input
             type="number"
-            placeholder="Units per purchase unit (e.g. 24)"
+            placeholder="Units per box — optional"
             className="rounded border px-3 py-2"
-            value={form.unitsPerPurchaseUnit}
-            onChange={(e) => setForm({ ...form, unitsPerPurchaseUnit: e.target.value })}
+            value={form.unitsPerBox}
+            onChange={(e) => setForm({ ...form, unitsPerBox: e.target.value })}
           />
           <input
             type="number"
-            placeholder="Reorder level (optional)"
+            placeholder="Boxes per skid — optional"
+            className="rounded border px-3 py-2"
+            value={form.boxesPerSkid}
+            onChange={(e) => setForm({ ...form, boxesPerSkid: e.target.value })}
+          />
+          <input
+            type="number"
+            step="0.001"
+            placeholder="Reorder level — optional"
             className="rounded border px-3 py-2"
             value={form.reorderLevel}
             onChange={(e) => setForm({ ...form, reorderLevel: e.target.value })}
           />
           <button
             disabled={saving}
-            className="rounded bg-brand px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded bg-brand px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50 sm:col-span-4"
           >
             {saving ? "Saving..." : "Save product"}
           </button>
@@ -152,24 +164,22 @@ export default function ProductsPage() {
         <table className="w-full overflow-hidden rounded-lg border bg-white text-sm">
           <thead className="bg-gray-100 text-left">
             <tr>
+              <th className="p-3">Product ID</th>
               <th className="p-3">Name</th>
-              <th className="p-3">SKU</th>
-              <th className="p-3">Unit</th>
-              <th className="p-3">Price</th>
+              <th className="p-3">Package</th>
               <th className="p-3">Current Qty</th>
             </tr>
           </thead>
           <tbody>
             {products.map((p) => {
-              const low = p.reorderLevel != null && p.currentQuantity <= p.reorderLevel;
+              const low = p.reorderLevel != null && p.currentQuantity <= Number(p.reorderLevel);
               return (
                 <tr key={p.id} className="border-t">
-                  <td className="p-3">{p.name}</td>
                   <td className="p-3 text-gray-500">{p.sku ?? "-"}</td>
-                  <td className="p-3">{p.baseUnit}</td>
-                  <td className="p-3">${Number(p.defaultPrice).toFixed(2)}</td>
+                  <td className="p-3">{deriveDescription(p)}</td>
+                  <td className="p-3">{deriveActivity(p) || "-"}</td>
                   <td className={`p-3 font-medium ${low ? "text-red-600" : ""}`}>
-                    {p.currentQuantity}
+                    {p.currentQuantity} {p.unit}
                     {low && " (low)"}
                   </td>
                 </tr>
