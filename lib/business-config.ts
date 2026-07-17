@@ -10,9 +10,9 @@ export const businessConfig = {
   website: "www.cnclubricants.com",
   gstHstNumber: "713022879RT0001",
   businessNumber: "713022879",
-  defaultFooterNote: "Thank you for your business and have a nice day.",
+  defaultFooterNote: "All items on the invoice are the property of CNC Grease & Lubricants until paid in full.\nThank you for your business and have a nice day.",
   colors: {
-    gold: "#A9790A", // approximated from the reference PDF — swap for real hex when available
+    gold: "#806000", // dark gold for invoice text labels
     paleYellow: "#FFF6C9",
     text: "#111111",
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { groupProductLines, packageLabel } from "@/lib/calculations";
 
 type Product = {
@@ -11,185 +11,415 @@ type Product = {
   packageSize: string | null;
   unit: string;
 };
-type Txn = {
+type StockLevel = {
   id: string;
-  txnDate: string;
-  txnType: string;
-  entryUnit: string;
-  entryQuantity: string;
-  reference: string | null;
-  product: Product;
+  name: string;
+  variant: string | null;
+  packageType: string | null;
+  packageSize: number | null;
+  unit: string;
+  unitsPerBox: number | null;
+  baseUnits: number;
+  wholePackages: number;
+  remainderBaseUnits: number;
 };
 
-const emptyForm = {
-  lineKey: "",
-  productId: "",
-  txnType: "STOCK_IN",
-  entryUnit: "PACKAGE",
-  entryQuantity: "",
-  reference: "",
-  notes: "",
+const emptyTxnForm = {
+  lineKey: "", productId: "", txnType: "STOCK_IN",
+  entryUnit: "PACKAGE", entryQuantity: "", reference: "", notes: "",
 };
+
+const emptyAddForm = {
+  mode: "existing" as "existing" | "new",
+  existingLineKey: "",
+  name: "", variant: "", sku: "",
+  packageType: "", packageSize: "", unit: "kg", unitsPerBox: "",
+};
+
+const STORAGE_KEY = "cnc-stock-line-order";
 
 export default function StockPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [transactions, setTransactions] = useState<Txn[]>([]);
-  const [form, setForm] = useState(emptyForm);
+  const [stockLevels, setStockLevels] = useState<StockLevel[]>([]);
+
+  // Log transaction form
+  const [showTxnForm, setShowTxnForm] = useState(false);
+  const [txnForm, setTxnForm] = useState(emptyTxnForm);
   const [saving, setSaving] = useState(false);
 
-  async function load() {
-    const [productsRes, txnsRes] = await Promise.all([
-      fetch("/api/products"),
-      fetch("/api/stock-transactions"),
-    ]);
-    setProducts(await productsRes.json());
-    setTransactions(await txnsRes.json());
-  }
+  // Add product form
+  const [showAddProduct, setShowAddProduct] = useState(false);
+  const [addForm, setAddForm] = useState(emptyAddForm);
+  const [addSaving, setAddSaving] = useState(false);
+
+  // Accordion open state
+  const [openLines, setOpenLines] = useState<Set<string>>(new Set());
+
+  // Drag-to-reorder state (localStorage-persisted)
+  const [lineOrder, setLineOrder] = useState<string[]>([]);
+  const dragIdx = useRef<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   useEffect(() => {
     load();
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) setLineOrder(JSON.parse(stored));
+    } catch {}
   }, []);
 
-  const lines = groupProductLines(products);
-  const selectedLine = lines.find((l) => l.key === form.lineKey);
-  const selectedProduct = products.find((p) => p.id === form.productId);
+  async function load() {
+    const [productsRes, levelsRes] = await Promise.all([
+      fetch("/api/products"),
+      fetch("/api/stock-levels"),
+    ]);
+    setProducts(await productsRes.json());
+    setStockLevels(await levelsRes.json());
+  }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function reload() {
+    const res = await fetch("/api/stock-levels");
+    setStockLevels(await res.json());
+  }
+
+  // ── Transaction form ──────────────────────────────────────────────────────
+  const lines = groupProductLines(products);
+  const selectedTxnLine = lines.find((l) => l.key === txnForm.lineKey);
+  const selectedProduct = products.find((p) => p.id === txnForm.productId);
+
+  async function handleTxnSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     await fetch("/api/stock-transactions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        productId: form.productId,
-        txnType: form.txnType,
-        entryUnit: form.entryUnit,
-        entryQuantity: parseFloat(form.entryQuantity),
-        reference: form.reference || undefined,
-        notes: form.notes || undefined,
+        productId: txnForm.productId,
+        txnType: txnForm.txnType,
+        entryUnit: txnForm.entryUnit,
+        entryQuantity: parseFloat(txnForm.entryQuantity),
+        reference: txnForm.reference || undefined,
+        notes: txnForm.notes || undefined,
       }),
     });
     setSaving(false);
-    setForm(emptyForm);
-    load();
+    setTxnForm(emptyTxnForm);
+    setShowTxnForm(false);
+    reload();
+  }
+
+  // ── Add product form ──────────────────────────────────────────────────────
+  const existingLine = lines.find((l) => l.key === addForm.existingLineKey);
+  const existingLineProduct = existingLine?.products[0]; // grab name/variant/unit from first SKU
+
+  async function handleAddProduct(e: React.FormEvent) {
+    e.preventDefault();
+    setAddSaving(true);
+    const body =
+      addForm.mode === "existing"
+        ? {
+            name: existingLineProduct?.name ?? "",
+            variant: existingLineProduct?.variant ?? undefined,
+            unit: addForm.unit || existingLineProduct?.unit || "kg",
+            sku: addForm.sku || undefined,
+            packageType: addForm.packageType || undefined,
+            packageSize: addForm.packageSize ? parseFloat(addForm.packageSize) : undefined,
+            unitsPerBox: addForm.unitsPerBox ? parseInt(addForm.unitsPerBox) : undefined,
+          }
+        : {
+            name: addForm.name,
+            variant: addForm.variant || undefined,
+            unit: addForm.unit,
+            sku: addForm.sku || undefined,
+            packageType: addForm.packageType || undefined,
+            packageSize: addForm.packageSize ? parseFloat(addForm.packageSize) : undefined,
+            unitsPerBox: addForm.unitsPerBox ? parseInt(addForm.unitsPerBox) : undefined,
+          };
+
+    await fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    setAddSaving(false);
+    setAddForm(emptyAddForm);
+    setShowAddProduct(false);
+    load(); // reload products + stock levels
+  }
+
+  // ── Inventory accordion data ──────────────────────────────────────────────
+  const stockByLine = useMemo(() => {
+    const map = new Map<string, StockLevel[]>();
+    for (const level of stockLevels) {
+      const key = `${level.name}__${level.variant ?? ""}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(level);
+    }
+    return map;
+  }, [stockLevels]);
+
+  const inventoryLines = useMemo(() => {
+    return Array.from(stockByLine.entries()).map(([key, items]) => ({
+      key,
+      label: [items[0].name, items[0].variant].filter(Boolean).join(" "),
+      // Sort SKUs: largest package first
+      items: [...items].sort((a, b) => (b.packageSize ?? 0) - (a.packageSize ?? 0)),
+      totalBaseUnits: items.reduce((s, i) => s + i.baseUnits, 0),
+    }));
+  }, [stockByLine]);
+
+  // Apply saved drag order; new lines not in the order append to the bottom
+  const orderedLines = useMemo(() => {
+    if (lineOrder.length === 0) return [...inventoryLines].sort((a, b) => a.label.localeCompare(b.label));
+    const orderMap = new Map(lineOrder.map((key, i) => [key, i]));
+    return [...inventoryLines].sort((a, b) => {
+      const ai = orderMap.has(a.key) ? orderMap.get(a.key)! : Infinity;
+      const bi = orderMap.has(b.key) ? orderMap.get(b.key)! : Infinity;
+      if (ai === Infinity && bi === Infinity) return a.label.localeCompare(b.label);
+      return ai - bi;
+    });
+  }, [inventoryLines, lineOrder]);
+
+  function toggleLine(key: string) {
+    setOpenLines((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  // ── Drag-to-reorder ───────────────────────────────────────────────────────
+  function onDragStart(idx: number) {
+    dragIdx.current = idx;
+  }
+  function onDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    setDragOverIdx(idx);
+  }
+  function onDrop(idx: number) {
+    const from = dragIdx.current;
+    if (from === null || from === idx) { dragIdx.current = null; setDragOverIdx(null); return; }
+    const reordered = [...orderedLines];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(idx, 0, moved);
+    const newOrder = reordered.map((l) => l.key);
+    setLineOrder(newOrder);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newOrder));
+    dragIdx.current = null;
+    setDragOverIdx(null);
+  }
+  function onDragEnd() {
+    dragIdx.current = null;
+    setDragOverIdx(null);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function quantityLabel(level: StockLevel): string {
+    if (!level.packageType || !level.packageSize) return `${level.baseUnits.toFixed(2)} ${level.unit}`;
+    const parts: string[] = [];
+    if (level.wholePackages > 0) parts.push(`${level.wholePackages} ${level.packageType}${level.wholePackages !== 1 ? "s" : ""}`);
+    if (level.remainderBaseUnits > 0.001) parts.push(`${level.remainderBaseUnits.toFixed(2)} ${level.unit}`);
+    return parts.length === 0 ? `0 ${level.packageType}s` : parts.join(" + ");
+  }
+  function stockStatusColor(level: StockLevel): string {
+    if (level.baseUnits <= 0) return "text-red-600";
+    if (level.wholePackages <= 2) return "text-amber-600";
+    return "text-green-700";
   }
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Stock</h1>
 
-      <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
-        <select
-          required
-          className="rounded border px-3 py-2"
-          value={form.lineKey}
-          onChange={(e) => setForm({ ...form, lineKey: e.target.value, productId: "" })}
-        >
-          <option value="">1. Select product...</option>
-          {lines.map((l) => (
-            <option key={l.key} value={l.key}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          required
-          disabled={!selectedLine}
-          className="rounded border px-3 py-2 disabled:bg-gray-100"
-          value={form.productId}
-          onChange={(e) => setForm({ ...form, productId: e.target.value })}
-        >
-          <option value="">2. Select package...</option>
-          {selectedLine?.products.map((p) => (
-            <option key={p.id} value={p.id}>
-              {packageLabel(p)}
-            </option>
-          ))}
-        </select>
-
-        <select
-          className="rounded border px-3 py-2"
-          value={form.txnType}
-          onChange={(e) => setForm({ ...form, txnType: e.target.value })}
-        >
-          <option value="STOCK_IN">Stock In (received)</option>
-          <option value="STOCK_OUT">Stock Out</option>
-          <option value="ADJUSTMENT">Adjustment</option>
-        </select>
-
-        <select
-          className="rounded border px-3 py-2"
-          value={form.entryUnit}
-          onChange={(e) => setForm({ ...form, entryUnit: e.target.value })}
-        >
-          <option value="PACKAGE">
-            By the {selectedProduct?.packageType?.toLowerCase() ?? "package"}
-          </option>
-          <option value="BASE_UNIT">By the {selectedProduct?.unit ?? "unit"} (partial package)</option>
-        </select>
-
-        <input
-          required
-          type="number"
-          step="0.001"
-          placeholder={
-            form.entryUnit === "PACKAGE"
-              ? `How many ${selectedProduct?.packageType?.toLowerCase() ?? "packages"}?`
-              : `How many ${selectedProduct?.unit ?? "units"}?`
-          }
-          className="rounded border px-3 py-2 sm:col-span-2"
-          value={form.entryQuantity}
-          onChange={(e) => setForm({ ...form, entryQuantity: e.target.value })}
-        />
-
-        <input
-          placeholder="Reference (optional)"
-          className="rounded border px-3 py-2"
-          value={form.reference}
-          onChange={(e) => setForm({ ...form, reference: e.target.value })}
-        />
-        <input
-          placeholder="Notes (optional)"
-          className="rounded border px-3 py-2"
-          value={form.notes}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-        />
-
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-2">
         <button
-          disabled={saving}
-          className="rounded bg-brand px-3 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50 sm:col-span-2"
+          type="button"
+          className="rounded bg-brand px-4 py-2 text-sm text-brand-navy hover:opacity-90"
+          onClick={() => { setShowTxnForm((s) => !s); setShowAddProduct(false); }}
         >
-          {saving ? "Saving..." : "Log transaction"}
+          {showTxnForm ? "Cancel" : "+ Log Transaction"}
         </button>
-      </form>
+        <button
+          type="button"
+          className="rounded border border-brand-navy px-4 py-2 text-sm text-brand-navy hover:bg-brand/20"
+          onClick={() => { setShowAddProduct((s) => !s); setShowTxnForm(false); }}
+        >
+          {showAddProduct ? "Cancel" : "+ Add Product"}
+        </button>
+      </div>
 
-      <table className="w-full overflow-hidden rounded-lg border bg-white text-sm">
-        <thead className="bg-gray-100 text-left">
-          <tr>
-            <th className="p-3">Date</th>
-            <th className="p-3">Product</th>
-            <th className="p-3">Type</th>
-            <th className="p-3">Qty entered</th>
-            <th className="p-3">Level</th>
-            <th className="p-3">Reference</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((t) => (
-            <tr key={t.id} className="border-t">
-              <td className="p-3">{new Date(t.txnDate).toLocaleDateString()}</td>
-              <td className="p-3">
-                {t.product.name} {t.product.variant} — {packageLabel(t.product)}
-              </td>
-              <td className="p-3">{t.txnType}</td>
-              <td className="p-3">{t.entryQuantity}</td>
-              <td className="p-3">{t.entryUnit === "PACKAGE" ? t.product.packageType : t.product.unit}</td>
-              <td className="p-3 text-gray-500">{t.reference ?? "-"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Log transaction form */}
+      {showTxnForm && (
+        <form onSubmit={handleTxnSubmit} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
+          <select required className="rounded border px-3 py-2" value={txnForm.lineKey}
+            onChange={(e) => setTxnForm({ ...txnForm, lineKey: e.target.value, productId: "" })}>
+            <option value="">1. Select product...</option>
+            {lines.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+          </select>
+          <select required disabled={!selectedTxnLine} className="rounded border px-3 py-2 disabled:bg-gray-100"
+            value={txnForm.productId} onChange={(e) => setTxnForm({ ...txnForm, productId: e.target.value })}>
+            <option value="">2. Select package...</option>
+            {selectedTxnLine?.products
+              .slice()
+              .sort((a, b) => (Number(b.packageSize ?? 0) || 0) - (Number(a.packageSize ?? 0) || 0))
+              .map((p) => <option key={p.id} value={p.id}>{packageLabel(p)}</option>)}
+          </select>
+          <select className="rounded border px-3 py-2" value={txnForm.txnType}
+            onChange={(e) => setTxnForm({ ...txnForm, txnType: e.target.value })}>
+            <option value="STOCK_IN">Stock In (received)</option>
+            <option value="STOCK_OUT">Stock Out</option>
+            <option value="ADJUSTMENT">Adjustment</option>
+          </select>
+          <select className="rounded border px-3 py-2" value={txnForm.entryUnit}
+            onChange={(e) => setTxnForm({ ...txnForm, entryUnit: e.target.value })}>
+            <option value="PACKAGE">By the {selectedProduct?.packageType?.toLowerCase() ?? "package"}</option>
+            <option value="BASE_UNIT">By the {selectedProduct?.unit ?? "unit"} (partial)</option>
+          </select>
+          <input required type="number" step="0.001"
+            placeholder={txnForm.entryUnit === "PACKAGE"
+              ? `How many ${selectedProduct?.packageType?.toLowerCase() ?? "packages"}?`
+              : `How many ${selectedProduct?.unit ?? "units"}?`}
+            className="rounded border px-3 py-2 sm:col-span-2"
+            value={txnForm.entryQuantity} onChange={(e) => setTxnForm({ ...txnForm, entryQuantity: e.target.value })} />
+          <input placeholder="Reference (optional)" className="rounded border px-3 py-2"
+            value={txnForm.reference} onChange={(e) => setTxnForm({ ...txnForm, reference: e.target.value })} />
+          <input placeholder="Notes (optional)" className="rounded border px-3 py-2"
+            value={txnForm.notes} onChange={(e) => setTxnForm({ ...txnForm, notes: e.target.value })} />
+          <button disabled={saving}
+            className="w-full rounded bg-brand px-3 py-2 text-sm text-brand-navy hover:opacity-90 disabled:opacity-50 sm:col-span-2">
+            {saving ? "Saving..." : "Log transaction"}
+          </button>
+        </form>
+      )}
+
+      {/* Add product form */}
+      {showAddProduct && (
+        <form onSubmit={handleAddProduct} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
+          {/* Mode toggle */}
+          <div className="flex gap-2 sm:col-span-2">
+            {(["existing", "new"] as const).map((m) => (
+              <button key={m} type="button"
+                className={`rounded px-3 py-1.5 text-sm ${addForm.mode === m ? "bg-brand text-brand-navy font-medium" : "border text-gray-600 hover:bg-gray-50"}`}
+                onClick={() => setAddForm({ ...emptyAddForm, mode: m })}>
+                {m === "existing" ? "New packaging for existing product" : "Brand-new product"}
+              </button>
+            ))}
+          </div>
+
+          {addForm.mode === "existing" ? (
+            <>
+              <select required className="rounded border px-3 py-2 sm:col-span-2"
+                value={addForm.existingLineKey}
+                onChange={(e) => setAddForm({ ...addForm, existingLineKey: e.target.value })}>
+                <option value="">Select existing product...</option>
+                {lines.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+              </select>
+              {existingLineProduct && (
+                <p className="text-xs text-gray-500 sm:col-span-2">
+                  Unit inherited: <strong>{existingLineProduct.unit}</strong>
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <input required placeholder="Product name (e.g. Hector Grease)" className="rounded border px-3 py-2"
+                value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+              <input placeholder="Variant (e.g. 4, 75W90) — optional" className="rounded border px-3 py-2"
+                value={addForm.variant} onChange={(e) => setAddForm({ ...addForm, variant: e.target.value })} />
+            </>
+          )}
+
+          <input placeholder="Package type (e.g. Drum, Keg, Pail)" className="rounded border px-3 py-2"
+            value={addForm.packageType} onChange={(e) => setAddForm({ ...addForm, packageType: e.target.value })} />
+          <input type="number" step="0.001" placeholder="Package size (e.g. 181.4)" className="rounded border px-3 py-2"
+            value={addForm.packageSize} onChange={(e) => setAddForm({ ...addForm, packageSize: e.target.value })} />
+
+          {addForm.mode === "new" && (
+            <input required={addForm.mode === "new"} placeholder="Unit (e.g. kg, L)" className="rounded border px-3 py-2"
+              value={addForm.unit} onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })} />
+          )}
+
+          <input placeholder="SKU (optional)" className="rounded border px-3 py-2"
+            value={addForm.sku} onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })} />
+          <input type="number" placeholder="Units per box (optional)" className="rounded border px-3 py-2"
+            value={addForm.unitsPerBox} onChange={(e) => setAddForm({ ...addForm, unitsPerBox: e.target.value })} />
+
+          <button disabled={addSaving}
+            className="w-full rounded bg-brand px-3 py-2 text-sm text-brand-navy hover:opacity-90 disabled:opacity-50 sm:col-span-2">
+            {addSaving ? "Saving..." : "Save product"}
+          </button>
+        </form>
+      )}
+
+      {/* Inventory accordion */}
+      <section>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-medium">Current Inventory</h2>
+          <span className="text-xs text-gray-400">Drag ⠿ to reorder</span>
+        </div>
+        <div className="overflow-hidden rounded-lg border bg-white">
+          {orderedLines.length === 0 && (
+            <div className="p-4 text-sm text-gray-400">No stock data yet.</div>
+          )}
+          {orderedLines.map((line, idx) => {
+            const isOpen = openLines.has(line.key);
+            const isDragTarget = dragOverIdx === idx;
+            return (
+              <div
+                key={line.key}
+                className={`${idx > 0 ? "border-t" : ""} ${isDragTarget ? "bg-brand/10" : ""}`}
+                draggable
+                onDragStart={() => onDragStart(idx)}
+                onDragOver={(e) => onDragOver(e, idx)}
+                onDrop={() => onDrop(idx)}
+                onDragEnd={onDragEnd}
+              >
+                <div className="flex w-full items-center">
+                  {/* Drag handle */}
+                  <span
+                    className="cursor-grab px-3 py-3 text-gray-300 select-none active:cursor-grabbing"
+                    title="Drag to reorder"
+                  >
+                    ⠿
+                  </span>
+                  {/* Expand button */}
+                  <button
+                    type="button"
+                    className="flex flex-1 items-center justify-between py-3 pr-4 text-left hover:bg-gray-50"
+                    onClick={() => toggleLine(line.key)}
+                  >
+                    <span className="font-medium">{line.label}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-gray-500">
+                        {line.items.length} SKU{line.items.length !== 1 ? "s" : ""}
+                      </span>
+                      <span className="text-lg text-gray-400">{isOpen ? "▲" : "▼"}</span>
+                    </div>
+                  </button>
+                </div>
+
+                {/* Expanded SKU rows — sorted largest → smallest */}
+                {isOpen && (
+                  <div className="border-t bg-gray-50">
+                    {line.items.map((level) => (
+                      <div key={level.id}
+                        className="flex items-center justify-between border-t px-6 py-2.5 text-sm first:border-t-0">
+                        <span className="text-gray-600">
+                          {packageLabel({ packageType: level.packageType, packageSize: level.packageSize, unit: level.unit })}
+                        </span>
+                        <span className={`font-semibold ${stockStatusColor(level)}`}>
+                          {quantityLabel(level)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </main>
   );
 }

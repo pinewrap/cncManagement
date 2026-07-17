@@ -9,8 +9,8 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#16243F", // placeholder navy
-          accent: "#FFD400", // placeholder yellow
+          DEFAULT: "#FFC20E", // CNC yellow — primary brand color
+          navy: "#16243F",    // CNC navy — dark text / secondary bg
         },
       },
     },

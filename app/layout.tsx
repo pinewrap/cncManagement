@@ -1,26 +1,28 @@
 import type { Metadata, Viewport } from "next";
 import Nav from "@/components/Nav";
+import SplashScreen from "@/components/SplashScreen";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Invoicing App",
-  description: "Inventory and invoicing",
+  title: "CNC Lubricants",
+  description: "Inventory and invoicing for CNC Grease & Lubricants",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Invoicing App",
+    title: "CNC Lubricants",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#16243F",
+  themeColor: "#FFC20E",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body className="min-h-screen bg-gray-50 text-gray-900">
+        <SplashScreen />
         <Nav />
         <div className="mx-auto max-w-4xl px-4 py-6">{children}</div>
       </body>

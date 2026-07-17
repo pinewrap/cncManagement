@@ -118,6 +118,7 @@ model Invoice {
   otherChargesLabel  String? // e.g. "Freight" — null if not used on this invoice
   otherChargesAmount Decimal       @default(0) @db.Decimal(10, 2)
   footerNote         String? // e.g. retention-of-title clause — varies per invoice in the reference PDFs
+  extraNotes         String? // newline-separated extra notes printed above the footer
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 

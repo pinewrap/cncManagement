@@ -2,8 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { invoiceTotals, nextInvoiceNumber, taxLabel } from "@/lib/calculations";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const customerId = req.nextUrl.searchParams.get("customerId");
+  const countOnly = req.nextUrl.searchParams.get("count") === "true";
+
+  if (countOnly) {
+    const count = await prisma.invoice.count();
+    return NextResponse.json({ count });
+  }
+
   const invoices = await prisma.invoice.findMany({
+    where: customerId ? { customerId } : undefined,
     include: {
       customer: { include: { province: true } },
       lineItems: true,
@@ -31,13 +40,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  // Expected body: { customerId, dueDate?, otherChargesLabel?, otherChargesAmount?,
-  //   footerNote?, lineItems: [{ productId?, activity, description, unitPrice, quantity }] }
 
   const invoice = await prisma.$transaction(async (tx) => {
-    // Numbering: continues from the highest existing numeric invoice number.
-    // If none exist yet, starts at 1 — update the seed once you've decided
-    // where CNC's real sequence should pick up (see open question from earlier).
     const last = await tx.invoice.findFirst({
       orderBy: { createdAt: "desc" },
       select: { invoiceNumber: true },
@@ -46,12 +50,13 @@ export async function POST(req: NextRequest) {
 
     const created = await tx.invoice.create({
       data: {
-        invoiceNumber: nextInvoiceNumber(lastNumber),
+        invoiceNumber: body.invoiceNumber?.trim() || nextInvoiceNumber(lastNumber),
         customerId: body.customerId,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
         otherChargesLabel: body.otherChargesLabel ?? null,
         otherChargesAmount: body.otherChargesAmount ?? 0,
         footerNote: body.footerNote ?? null,
+        extraNotes: body.extraNotes?.length ? body.extraNotes.join("\n") : null,
         lineItems: {
           create: body.lineItems.map((item: any) => ({
             productId: item.productId ?? null,
@@ -65,15 +70,13 @@ export async function POST(req: NextRequest) {
       include: { lineItems: true, customer: { include: { province: true } } },
     });
 
-    // Auto-deduct stock — same logic as the AppSheet action: one SALE
-    // transaction per line item that references a real product.
     for (const item of created.lineItems) {
       if (!item.productId) continue;
       await tx.stockTransaction.create({
         data: {
           productId: item.productId,
           txnType: "SALE",
-          entryUnit: "BASE_UNIT", // invoice quantities are always in base units
+          entryUnit: "PACKAGE",
           entryQuantity: item.quantity,
           reference: created.invoiceNumber,
         },

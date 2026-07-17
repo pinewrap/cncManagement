@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel } from "@/lib/calculations";
-import { generateInvoicePdf } from "@/lib/pdf";
+import { generateInvoicePdf, loadLogoDataUrl } from "@/lib/pdf";
+import InvoicePreview from "@/components/InvoicePreview";
 
 type Province = { province: string; taxType: string; gstHstRate: string; pstQstRate: string };
 type Customer = {
@@ -175,28 +176,33 @@ export default function NewInvoicePage() {
     setSubmitting(false);
 
     // Generate + download the PDF immediately, matching CNC's reference layout
-    const doc = generateInvoicePdf({
-      invoiceNumber: invoice.invoiceNumber,
-      invoiceDate: new Date(invoice.invoiceDate).toLocaleDateString("en-CA"),
-      dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-CA") : null,
-      customer: invoice.customer,
-      lineItems: invoice.lineItems.map((li: any) => ({
-        ...li,
-        quantity: Number(li.quantity),
-        unitPrice: Number(li.unitPrice),
-      })),
-      taxLabel: invoice.taxLabel,
-      gstHstRateDisplay: rates ? `${(Number(rates.gstHstRate) * 100).toFixed(0)}%` : "0%",
-      pstQstRateDisplay:
-        rates && Number(rates.pstQstRate) > 0 ? `${(Number(rates.pstQstRate) * 100).toFixed(3)}%` : null,
-      subtotal: invoice.subtotal,
-      otherChargesLabel: invoice.otherChargesLabel,
-      otherChargesAmount: invoice.otherChargesAmount,
-      gstHstAmount: invoice.gstHstAmount,
-      pstQstAmount: invoice.pstQstAmount,
-      total: invoice.total,
-      footerNote: invoice.footerNote,
-    });
+    const [doc] = await Promise.all([
+      loadLogoDataUrl().then((logoDataUrl) =>
+        generateInvoicePdf({
+          invoiceNumber: invoice.invoiceNumber,
+          invoiceDate: new Date(invoice.invoiceDate).toLocaleDateString("en-CA"),
+          dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-CA") : null,
+          logoDataUrl,
+          customer: invoice.customer,
+          lineItems: invoice.lineItems.map((li: any) => ({
+            ...li,
+            quantity: Number(li.quantity),
+            unitPrice: Number(li.unitPrice),
+          })),
+          taxLabel: invoice.taxLabel,
+          gstHstRateDisplay: rates ? `${(Number(rates.gstHstRate) * 100).toFixed(0)}%` : "0%",
+          pstQstRateDisplay:
+            rates && Number(rates.pstQstRate) > 0 ? `${(Number(rates.pstQstRate) * 100).toFixed(3)}%` : null,
+          subtotal: invoice.subtotal,
+          otherChargesLabel: invoice.otherChargesLabel,
+          otherChargesAmount: invoice.otherChargesAmount,
+          gstHstAmount: invoice.gstHstAmount,
+          pstQstAmount: invoice.pstQstAmount,
+          total: invoice.total,
+          footerNote: invoice.footerNote,
+        })
+      ),
+    ]);
     doc.save(`invoice-${invoice.invoiceNumber}.pdf`);
 
     router.push("/invoices");
@@ -219,7 +225,7 @@ export default function NewInvoicePage() {
                   .join(", ")}
               </div>
             </div>
-            <button className="text-brand underline" onClick={() => setSelectedCustomer(null)}>
+            <button className="text-brand-navy underline" onClick={() => setSelectedCustomer(null)}>
               Change
             </button>
           </div>
@@ -248,7 +254,7 @@ export default function NewInvoicePage() {
               </ul>
             )}
             <button
-              className="mt-2 text-sm text-brand underline"
+              className="mt-2 text-sm text-brand-navy underline"
               onClick={() => setShowNewCustomer((s) => !s)}
             >
               {showNewCustomer ? "Cancel" : "+ Add new customer"}
@@ -305,7 +311,7 @@ export default function NewInvoicePage() {
                     </option>
                   ))}
                 </select>
-                <button className="rounded bg-brand px-3 py-2 text-sm text-white hover:opacity-90">
+                <button className="rounded bg-brand px-3 py-2 text-sm text-brand-navy hover:opacity-90">
                   Save customer
                 </button>
               </form>
@@ -321,9 +327,9 @@ export default function NewInvoicePage() {
           {lineItems.map((line, i) => {
             const selectedLine = productLines.find((l) => l.key === line.lineKey);
             return (
-            <div key={i} className="grid gap-2 rounded border p-3 sm:grid-cols-6">
+            <div key={i} className="grid grid-cols-2 gap-2 rounded border p-3 sm:grid-cols-6">
               <select
-                className="rounded border px-2 py-1.5 text-sm sm:col-span-2"
+                className="col-span-2 rounded border px-2 py-1.5 text-sm sm:col-span-2"
                 value={line.lineKey}
                 onChange={(e) => handleLinePick(i, e.target.value)}
               >
@@ -335,7 +341,7 @@ export default function NewInvoicePage() {
                 ))}
               </select>
               <select
-                className="rounded border px-2 py-1.5 text-sm disabled:bg-gray-100"
+                className="col-span-2 rounded border px-2 py-1.5 text-sm disabled:bg-gray-100 sm:col-span-1"
                 disabled={!selectedLine}
                 value={line.productId}
                 onChange={(e) => handlePackagePick(i, e.target.value)}
@@ -375,7 +381,7 @@ export default function NewInvoicePage() {
                 value={line.quantity}
                 onChange={(e) => updateLine(i, { quantity: e.target.value })}
               />
-              <div className="flex items-center justify-between text-sm text-gray-500 sm:col-span-5">
+              <div className="col-span-1 flex items-center text-sm text-gray-500 sm:col-span-5">
                 Line total: $
                 {((parseFloat(line.unitPrice) || 0) * (parseFloat(line.quantity) || 0)).toFixed(2)}
               </div>
@@ -390,7 +396,7 @@ export default function NewInvoicePage() {
           })}
         </div>
         <button
-          className="mt-3 text-sm text-brand underline"
+          className="mt-3 text-sm text-brand-navy underline"
           onClick={() => setLineItems((items) => [...items, { ...emptyLine }])}
         >
           + Add line item
@@ -459,10 +465,42 @@ export default function NewInvoicePage() {
         )}
       </section>
 
+      {/* Live invoice preview */}
+      <section>
+        <h2 className="mb-3 font-medium text-gray-700">Invoice Preview</h2>
+        <div className="overflow-x-auto">
+        <div className="min-w-[600px]">
+        <InvoicePreview
+          invoiceDate={new Date().toLocaleDateString("en-CA")}
+          dueDate={dueDate}
+          customer={selectedCustomer}
+          lineItems={lineItems
+            .filter((li) => li.description && li.unitPrice && li.quantity)
+            .map((li) => ({
+              activity: li.activity,
+              description: li.description,
+              unitPrice: parseFloat(li.unitPrice) || 0,
+              quantity: parseFloat(li.quantity) || 0,
+            }))}
+          taxLabel={taxLabelDisplay}
+          gstHstRateDisplay={rates ? `${(Number(rates.gstHstRate) * 100).toFixed(0)}%` : "0%"}
+          pstQstRateDisplay={rates && Number(rates.pstQstRate) > 0 ? `${(Number(rates.pstQstRate) * 100).toFixed(3)}%` : null}
+          subtotal={totals.subtotal}
+          otherChargesLabel={otherChargesLabel}
+          otherChargesAmount={totals.otherChargesAmount}
+          gstHstAmount={totals.gstHstAmount}
+          pstQstAmount={totals.pstQstAmount}
+          total={totals.total}
+          footerNote={footerNote}
+        />
+        </div>
+        </div>
+      </section>
+
       <button
         disabled={submitting}
         onClick={handleSubmit}
-        className="ml-auto rounded bg-brand px-4 py-2 text-white hover:opacity-90 disabled:opacity-50"
+        className="w-full rounded bg-brand px-4 py-2 text-brand-navy hover:opacity-90 disabled:opacity-50 sm:ml-auto sm:w-auto"
       >
         {submitting ? "Creating..." : "Create invoice + download PDF"}
       </button>

@@ -4,10 +4,13 @@ import { prisma } from "@/lib/prisma";
 export async function GET(req: NextRequest) {
   const productId = req.nextUrl.searchParams.get("productId");
 
+  const limit = parseInt(req.nextUrl.searchParams.get("limit") ?? "50", 10);
+
   const transactions = await prisma.stockTransaction.findMany({
     where: productId ? { productId } : undefined,
     include: { product: true },
     orderBy: { txnDate: "desc" },
+    take: limit,
   });
 
   return NextResponse.json(transactions);

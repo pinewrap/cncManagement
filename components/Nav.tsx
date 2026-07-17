@@ -1,10 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/products", label: "Inventory" },
   { href: "/stock", label: "Stock" },
   { href: "/invoices", label: "Invoices" },
   { href: "/customers", label: "Customers" },
@@ -14,25 +14,30 @@ export default function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="bg-brand text-white">
-      <div className="mx-auto flex max-w-4xl items-center gap-1 px-4 py-3">
-        <Link href="/" className="mr-4 font-semibold">
-          Invoicing App
-        </Link>
-        {links.map((link) => {
-          const active = pathname.startsWith(link.href);
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`rounded px-3 py-1.5 text-sm ${
-                active ? "bg-white/15 font-medium" : "text-white/80 hover:bg-white/10"
-              }`}
-            >
-              {link.label}
-            </Link>
-          );
-        })}
+    <nav className="bg-brand shadow-sm">
+      <div className="mx-auto max-w-4xl px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-1 gap-y-2">
+          <Link href="/" className="mr-3 flex items-center gap-2">
+            <Image src="/icon-192.png" alt="CNC Lubricants" width={36} height={36} className="rounded" />
+            <span className="hidden font-bold text-brand-navy sm:inline">CNC Grease &amp; Lubricants</span>
+          </Link>
+          {links.map((link) => {
+            const active = pathname.startsWith(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`rounded px-3 py-1.5 text-sm font-medium ${
+                  active
+                    ? "bg-brand-navy text-white"
+                    : "text-brand-navy/80 hover:bg-brand-navy/10"
+                }`}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );

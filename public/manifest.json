@@ -1,11 +1,11 @@
 {
-  "name": "Invoicing App",
-  "short_name": "Invoicing",
+  "name": "CNC Lubricants",
+  "short_name": "CNC",
   "description": "Inventory and invoicing",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#16243F",
+  "background_color": "#FFC20E",
+  "theme_color": "#FFC20E",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
