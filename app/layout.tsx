@@ -6,6 +6,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CNC Lubricants",
   description: "Inventory and invoicing for CNC Grease & Lubricants",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
+  },
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
