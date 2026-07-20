@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel } from "@/lib/calculations";
-import { generateInvoicePdf, loadLogoDataUrl } from "@/lib/pdf";
+import { generateInvoicePdf, generatePackingSlipPdf, loadLogoDataUrl } from "@/lib/pdf";
 import InvoicePreview from "@/components/InvoicePreview";
 
 type Province = { province: string; taxType: string; gstHstRate: string; pstQstRate: string };
@@ -142,6 +142,31 @@ export default function NewInvoicePage() {
     parseFloat(otherChargesAmount) || 0
   );
   const taxLabelDisplay = rates ? getTaxLabel(rates.taxType) : null;
+
+  async function handlePackingSlip() {
+  if (!selectedCustomer) {
+    alert("Select or add a customer first.");
+    return;
+  }
+  const validLines = lineItems.filter((li) => li.description && li.quantity);
+  if (validLines.length === 0) {
+    alert("Add at least one line item.");
+    return;
+  }
+  const logoDataUrl = await loadLogoDataUrl();
+  const doc = generatePackingSlipPdf({
+    invoiceNumber: invoiceNumber.trim() || undefined,
+    shipDate: new Date().toLocaleDateString("en-CA"),
+    logoDataUrl,
+    customer: selectedCustomer,
+    lineItems: validLines.map((li) => ({
+      activity: li.activity,
+      description: li.description,
+      quantity: parseFloat(li.quantity) || 0,
+    })),
+  });
+  doc.save(`packing-slip-${invoiceNumber.trim() || "draft"}.pdf`);
+}
 
   async function handleSubmit() {
     if (!selectedCustomer) {
@@ -504,6 +529,14 @@ export default function NewInvoicePage() {
         </div>
         </div>
       </section>
+
+      <button
+        type="button"
+        onClick={handlePackingSlip}
+        className="w-full rounded border border-brand-navy px-4 py-2 text-brand-navy hover:bg-brand/10 sm:ml-auto sm:w-auto"
+      >
+        Create Packing Slip
+      </button>
 
       <button
         disabled={submitting}
