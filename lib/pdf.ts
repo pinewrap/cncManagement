@@ -47,7 +47,7 @@ export function loadLogoDataUrl(): Promise<string> {
       resolve(canvas.toDataURL("image/png"));
     };
     img.onerror = () => resolve("");
-    img.src = "/icon-192.png";
+    img.src = "/icon-512.png";
   });
 }
 

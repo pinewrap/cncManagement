@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { invoiceTotals, nextInvoiceNumber, taxLabel } from "@/lib/calculations";
+import { invoiceTotals, nextInvoiceNumber, extractInvoiceNumber, taxLabel } from "@/lib/calculations";
 
 export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get("customerId");
@@ -42,11 +42,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
 
   const invoice = await prisma.$transaction(async (tx) => {
-    const last = await tx.invoice.findFirst({
-      orderBy: { createdAt: "desc" },
-      select: { invoiceNumber: true },
-    });
-    const lastNumber = last ? parseInt(last.invoiceNumber, 10) || 0 : 0;
+    const allInvoices = await tx.invoice.findMany({ select: { invoiceNumber: true } });
+    const lastNumber = allInvoices.reduce(
+      (max, inv) => Math.max(max, extractInvoiceNumber(inv.invoiceNumber)),
+      0
+    );
 
     const created = await tx.invoice.create({
       data: {

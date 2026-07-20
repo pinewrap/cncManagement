@@ -144,5 +144,13 @@ export function taxLabel(taxType: string): string {
  * the client's real sequence instead of restarting at 1.
  */
 export function nextInvoiceNumber(lastInvoiceNumber: number): string {
-  return String(lastInvoiceNumber + 1);
+  return `CNC-INV ${lastInvoiceNumber + 1}`;
+}
+ 
+/** Pulls the trailing number out of any invoice number format — handles old
+ * plain-number invoices ("3016"), the new "CNC-INV 3017" format, and any
+ * manually-typed custom number, as long as it ends in digits. */
+export function extractInvoiceNumber(invoiceNumber: string): number {
+  const match = invoiceNumber.match(/(\d+)\s*$/);
+  return match ? parseInt(match[1], 10) : 0;
 }

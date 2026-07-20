@@ -50,19 +50,29 @@ export default function InvoicesPage() {
     Promise.all([
       fetch("/api/invoices?count=true").then((r) => r.json()),
       fetch("/api/customers").then((r) => r.json()),
-    ]).then(([countData, customerData]) => {
+      fetch("/api/invoices").then((r) => r.json()), // load everyone's invoices up front, not gated behind picking a customer
+    ]).then(([countData, customerData, allInvoices]) => {
       setTotalCount(countData.count);
       setCustomers(customerData.sort((a: Customer, b: Customer) => a.name.localeCompare(b.name)));
+      setResults(allInvoices);
     });
   }, []);
 
-  async function handleFetch() {
-    if (!selectedCustomerId) return;
+  // Accepts an explicit override so "Clear" can re-fetch "all" immediately,
+  // without waiting on React's state batching for selectedCustomerId to settle.
+  async function handleFetch(customerIdOverride?: string) {
+    const id = customerIdOverride !== undefined ? customerIdOverride : selectedCustomerId;
     setFetching(true);
     setResults(null);
-    const res = await fetch(`/api/invoices?customerId=${selectedCustomerId}`);
+    const url = id ? `/api/invoices?customerId=${id}` : "/api/invoices";
+    const res = await fetch(url);
     setResults(await res.json());
     setFetching(false);
+  }
+
+  function clearCustomer() {
+    setSelectedCustomerId("");
+    handleFetch("");
   }
 
   async function toggleStatus(inv: InvoiceListItem) {
@@ -139,12 +149,19 @@ export default function InvoicesPage() {
         </Link>
       </div>
 
-      {/* Lookup panel */}
+      {/* Filter panel */}
       <div className="rounded-lg border bg-white p-4">
-        <h2 className="mb-3 font-medium">Search by Customer</h2>
+        <h2 className="mb-3 font-medium">All Invoices</h2>
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1" style={{ minWidth: "200px" }}>
-            <label className="mb-1 block text-xs text-gray-500">Customer</label>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs text-gray-500">Customer (optional)</label>
+              {selectedCustomerId && (
+                <button type="button" onClick={clearCustomer} className="text-xs text-brand-navy underline">
+                  Clear — show everyone
+                </button>
+              )}
+            </div>
             <CustomerSearch
               customers={customers}
               value={selectedCustomerId}
@@ -155,7 +172,7 @@ export default function InvoicesPage() {
             />
           </div>
 
-          {/* Status filter pills */}
+          {/* Status filter pills — work immediately, no customer required */}
           <div className="flex flex-col gap-1">
             <label className="text-xs text-gray-500">Status</label>
             <div className="flex rounded-lg border overflow-hidden text-sm">
@@ -176,11 +193,11 @@ export default function InvoicesPage() {
           </div>
 
           <button
-            disabled={!selectedCustomerId || fetching}
-            onClick={handleFetch}
+            disabled={fetching}
+            onClick={() => handleFetch()}
             className="rounded bg-brand px-4 py-2 text-sm text-brand-navy hover:opacity-90 disabled:opacity-40"
           >
-            {fetching ? "Loading..." : "Fetch invoices"}
+            {fetching ? "Loading..." : selectedCustomerId ? "Fetch invoices" : "Refresh"}
           </button>
         </div>
 
@@ -189,8 +206,12 @@ export default function InvoicesPage() {
           <div className="mt-4">
             <p className="mb-2 text-sm text-gray-600">
               {filteredResults.length === 0
-                ? `No ${statusFilter !== "ALL" ? statusFilter.toLowerCase() + " " : ""}invoices for ${selectedCustomer?.name}.`
-                : `${filteredResults.length} ${statusFilter !== "ALL" ? statusFilter.toLowerCase() + " " : ""}invoice${filteredResults.length !== 1 ? "s" : ""} for ${selectedCustomer?.name}`}
+                ? `No ${statusFilter !== "ALL" ? statusFilter.toLowerCase() + " " : ""}invoices${
+                    selectedCustomer ? ` for ${selectedCustomer.name}` : ""
+                  }.`
+                : `${filteredResults.length} ${statusFilter !== "ALL" ? statusFilter.toLowerCase() + " " : ""}invoice${
+                    filteredResults.length !== 1 ? "s" : ""
+                  }${selectedCustomer ? ` for ${selectedCustomer.name}` : ""}`}
             </p>
             {filteredResults.length > 0 && (
               <div className="overflow-x-auto rounded-lg border">
@@ -198,6 +219,7 @@ export default function InvoicesPage() {
                   <thead className="bg-gray-100 text-left">
                     <tr>
                       <th className="p-3">Invoice #</th>
+                      <th className="p-3">Customer</th>
                       <th className="p-3">Date</th>
                       <th className="p-3">Status</th>
                       <th className="p-3">Total</th>
@@ -212,6 +234,7 @@ export default function InvoicesPage() {
                           <td className="p-3 font-mono font-semibold text-brand-navy">
                             {inv.invoiceNumber}
                           </td>
+                          <td className="p-3 whitespace-nowrap">{inv.customer.name}</td>
                           <td className="p-3 whitespace-nowrap text-gray-500">
                             {fmtDate(inv.invoiceDate)}
                           </td>

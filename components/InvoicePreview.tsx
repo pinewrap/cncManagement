@@ -90,7 +90,7 @@ export default function InvoicePreview({
         </div>
         {/* Logo */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon-192.png" alt="logo" style={{ width: 72, height: 72, objectFit: "contain" }} />
+        <img src="/icon-512.png" alt="logo" style={{ width: 72, height: 72, objectFit: "contain" }} />
       </div>
 
       {/* ── Divider after header ── */}

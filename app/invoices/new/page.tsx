@@ -65,6 +65,7 @@ export default function NewInvoicePage() {
   const [provinces, setProvinces] = useState<Province[]>([]);
 
   const [lineItems, setLineItems] = useState<LineItem[]>([{ ...emptyLine }]);
+  const [invoiceNumber, setInvoiceNumber] = useState("");
   const [otherChargesLabel, setOtherChargesLabel] = useState("");
   const [otherChargesAmount, setOtherChargesAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -159,6 +160,7 @@ export default function NewInvoicePage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         customerId: selectedCustomer.id,
+        invoiceNumber: invoiceNumber.trim() || undefined,
         dueDate: dueDate || undefined,
         otherChargesLabel: otherChargesLabel || undefined,
         otherChargesAmount: parseFloat(otherChargesAmount) || undefined,
@@ -405,6 +407,12 @@ export default function NewInvoicePage() {
 
       {/* Other details */}
       <section className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
+        <input
+          placeholder="Invoice # — leave blank to auto-generate (e.g. CNC-INV 3017)"
+          className="rounded border px-3 py-2 sm:col-span-2"
+          value={invoiceNumber}
+          onChange={(e) => setInvoiceNumber(e.target.value)}
+        />
         <input
           placeholder="Other charge label (e.g. Freight) — optional"
           className="rounded border px-3 py-2"

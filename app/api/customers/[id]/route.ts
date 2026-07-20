@@ -79,3 +79,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }),
   });
 }
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+ 
+  const invoiceCount = await prisma.invoice.count({ where: { customerId: id } });
+ 
+  if (invoiceCount > 0) {
+    return NextResponse.json(
+      { error: "This customer has invoices on file and can't be deleted." },
+      { status: 409 }
+    );
+  }
+ 
+  await prisma.customer.delete({ where: { id } });
+  return NextResponse.json({ deleted: true });
+}
