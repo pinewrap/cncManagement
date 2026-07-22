@@ -25,6 +25,7 @@ type Product = {
   packageType: string | null;
   packageSize: string | null;
   unit: string;
+  unitsPerBox: number | null;
 };
 type StockLevel = {
   id: string;
@@ -54,7 +55,7 @@ const emptyAddForm = {
   mode: "existing" as "existing" | "new",
   existingLineKey: "",
   name: "", variant: "", sku: "",
-  packageType: "", packageSize: "", unit: "kg", unitsPerBox: "",
+  packageType: "", packageSize: "", unit: "", unitsPerBox: "",
 };
 
 const STORAGE_KEY = "cnc-stock-line-order";
@@ -87,13 +88,9 @@ export default function StockPage() {
   // Drag-to-reorder state (localStorage-persisted)
   const [lineOrder, setLineOrder] = useState<string[]>([]);
 
-  // PointerSensor handles mouse AND touch through one unified code path —
-  // this is the fix for drag-to-reorder not working on iOS home-screen
-  // installs (native HTML5 drag events never worked via touch on iOS at
-  // all, in any context; this replaces that with something that does).
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 5 }, // small threshold so a tap still opens the accordion instead of starting a drag
+      activationConstraint: { distance: 5 },
     })
   );
 
@@ -157,7 +154,7 @@ export default function StockPage() {
         ? {
             name: existingLineProduct?.name ?? "",
             variant: existingLineProduct?.variant ?? undefined,
-            unit: addForm.unit || existingLineProduct?.unit || "kg",
+            unit: addForm.unit,
             sku: addForm.sku || undefined,
             packageType: addForm.packageType || undefined,
             packageSize: addForm.packageSize ? parseFloat(addForm.packageSize) : undefined,
@@ -276,6 +273,20 @@ export default function StockPage() {
   // ── Helpers ───────────────────────────────────────────────────────────────
   function quantityLabel(level: StockLevel): string {
     if (!level.packageType || !level.packageSize) return `${level.baseUnits.toFixed(2)} ${level.unit}`;
+
+    if (level.unitsPerBox) {
+      // Box-only product: express everything in terms of boxes, skipping
+      // the individual tube/tub level entirely — this client never sells
+      // them loose, so that granularity would just be noise here.
+      const baseUnitsPerBox = level.packageSize * level.unitsPerBox;
+      const wholeBoxes = Math.floor(level.baseUnits / baseUnitsPerBox);
+      const remainder = level.baseUnits - wholeBoxes * baseUnitsPerBox;
+      const parts: string[] = [];
+      if (wholeBoxes > 0) parts.push(`${wholeBoxes} box${wholeBoxes !== 1 ? "es" : ""}`);
+      if (remainder > 0.001) parts.push(`${remainder.toFixed(2)} ${level.unit}`);
+      return parts.length === 0 ? "0 boxes" : parts.join(" + ");
+    }
+
     const parts: string[] = [];
     if (level.wholePackages > 0) parts.push(`${level.wholePackages} ${level.packageType}${level.wholePackages !== 1 ? "s" : ""}`);
     if (level.remainderBaseUnits > 0.001) parts.push(`${level.remainderBaseUnits.toFixed(2)} ${level.unit}`);
@@ -313,12 +324,18 @@ export default function StockPage() {
       {showTxnForm && (
         <form onSubmit={handleTxnSubmit} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
           <select required className="rounded border px-3 py-2" value={txnForm.lineKey}
-            onChange={(e) => setTxnForm({ ...txnForm, lineKey: e.target.value, productId: "" })}>
+            onChange={(e) => setTxnForm({ ...txnForm, lineKey: e.target.value, productId: "", entryUnit: "PACKAGE" })}>
             <option value="">1. Select product...</option>
             {lines.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
           </select>
           <select required disabled={!selectedTxnLine} className="rounded border px-3 py-2 disabled:bg-gray-100"
-            value={txnForm.productId} onChange={(e) => setTxnForm({ ...txnForm, productId: e.target.value })}>
+            value={txnForm.productId}
+            onChange={(e) => {
+              const product = products.find((p) => p.id === e.target.value);
+              // Box-only products (unitsPerBox set) should default straight
+              // to BOX, not PACKAGE — this client never sells them loose.
+              setTxnForm({ ...txnForm, productId: e.target.value, entryUnit: product?.unitsPerBox ? "BOX" : "PACKAGE" });
+            }}>
             <option value="">2. Select package...</option>
             {selectedTxnLine?.products
               .slice()
@@ -333,13 +350,32 @@ export default function StockPage() {
           </select>
           <select className="rounded border px-3 py-2" value={txnForm.entryUnit}
             onChange={(e) => setTxnForm({ ...txnForm, entryUnit: e.target.value })}>
-            <option value="PACKAGE">By the {selectedProduct?.packageType?.toLowerCase() ?? "package"}</option>
-            <option value="BASE_UNIT">By the {selectedProduct?.unit ?? "unit"} (partial)</option>
+            {selectedProduct?.unitsPerBox ? (
+              // Box-only product: no "by the tube/tub" option at all — this
+              // client never sells them loose, so only boxes (plus a partial
+              // fallback for damage/adjustment write-offs) make sense here.
+              <>
+                <option value="BOX">
+                  By the box (of {selectedProduct.unitsPerBox} {selectedProduct.packageType?.toLowerCase() ?? "package"}
+                  {selectedProduct.unitsPerBox !== 1 ? "s" : ""})
+                </option>
+                <option value="BASE_UNIT">By the {selectedProduct?.unit ?? "unit"} (partial/adjustment)</option>
+              </>
+            ) : (
+              <>
+                <option value="PACKAGE">By the {selectedProduct?.packageType?.toLowerCase() ?? "package"}</option>
+                <option value="BASE_UNIT">By the {selectedProduct?.unit ?? "unit"} (partial)</option>
+              </>
+            )}
           </select>
           <input required type="number" step="0.001"
-            placeholder={txnForm.entryUnit === "PACKAGE"
-              ? `How many ${selectedProduct?.packageType?.toLowerCase() ?? "packages"}?`
-              : `How many ${selectedProduct?.unit ?? "units"}?`}
+            placeholder={
+              txnForm.entryUnit === "BOX"
+                ? "How many boxes?"
+                : txnForm.entryUnit === "PACKAGE"
+                ? `How many ${selectedProduct?.packageType?.toLowerCase() ?? "packages"}?`
+                : `How many ${selectedProduct?.unit ?? "units"}?`
+            }
             className="rounded border px-3 py-2 sm:col-span-2"
             value={txnForm.entryQuantity} onChange={(e) => setTxnForm({ ...txnForm, entryQuantity: e.target.value })} />
           <input placeholder="Reference (optional)" className="rounded border px-3 py-2"
@@ -370,14 +406,33 @@ export default function StockPage() {
             <>
               <select required className="rounded border px-3 py-2 sm:col-span-2"
                 value={addForm.existingLineKey}
-                onChange={(e) => setAddForm({ ...addForm, existingLineKey: e.target.value })}>
+                onChange={(e) => {
+                  const lineKey = e.target.value;
+                  const line = lines.find((l) => l.key === lineKey);
+                  // Suggest the existing unit as a starting point, but this
+                  // stays fully editable below — a product line can
+                  // legitimately mix units (e.g. Eligate Red Gel has both kg
+                  // kegs and gm tubes), so silently inheriting was the bug.
+                  setAddForm({ ...addForm, existingLineKey: lineKey, unit: line?.products[0]?.unit ?? "" });
+                }}>
                 <option value="">Select existing product...</option>
                 {lines.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
               </select>
               {existingLineProduct && (
-                <p className="text-xs text-gray-500 sm:col-span-2">
-                  Unit inherited: <strong>{existingLineProduct.unit}</strong>
-                </p>
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs text-gray-500">
+                    Unit for this new package — defaults to {existingLineProduct.unit}, change it if this
+                    package uses a different one (e.g. gm instead of kg)
+                  </label>
+                  <select required className="rounded border px-3 py-2"
+                    value={addForm.unit}
+                    onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })}>
+                    <option value="">Select unit...</option>
+                    <option value="kg">kg</option>
+                    <option value="gm">gm</option>
+                    <option value="L">L</option>
+                  </select>
+                </div>
               )}
             </>
           ) : (
@@ -395,13 +450,18 @@ export default function StockPage() {
             value={addForm.packageSize} onChange={(e) => setAddForm({ ...addForm, packageSize: e.target.value })} />
 
           {addForm.mode === "new" && (
-            <input required={addForm.mode === "new"} placeholder="Unit (e.g. kg, L)" className="rounded border px-3 py-2"
-              value={addForm.unit} onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })} />
+            <select required={addForm.mode === "new"} className="rounded border px-3 py-2"
+              value={addForm.unit} onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })}>
+              <option value="">Select unit...</option>
+              <option value="kg">kg</option>
+              <option value="gm">gm</option>
+              <option value="L">L</option>
+            </select>
           )}
 
           <input placeholder="SKU (optional)" className="rounded border px-3 py-2"
             value={addForm.sku} onChange={(e) => setAddForm({ ...addForm, sku: e.target.value })} />
-          <input type="number" placeholder="Units per box (optional)" className="rounded border px-3 py-2"
+          <input type="number" placeholder="Units per box (optional, e.g. 24)" className="rounded border px-3 py-2"
             value={addForm.unitsPerBox} onChange={(e) => setAddForm({ ...addForm, unitsPerBox: e.target.value })} />
 
           <button disabled={addSaving}
@@ -484,8 +544,6 @@ function InventoryLineRow({
       className={`${!isFirst ? "border-t" : ""} bg-white ${isDragging ? "relative z-10 shadow-md" : ""}`}
     >
       <div className="flex w-full items-center">
-        {/* Drag handle — touch-none is required so iOS hands the gesture to
-            JS instead of trying to scroll the page with it */}
         <span
           {...attributes}
           {...listeners}

@@ -53,7 +53,10 @@ export type PackingSlipPdfData = {
 
 const money = (n: number) => n.toFixed(2);
 
-function toDDMMYYYY(dateStr: string): string {
+/** Converts a "YYYY-MM-DD"-ish string (e.g. from toLocaleDateString("en-CA"))
+ * to "DD-MM-YYYY" for display, without going through Date parsing — avoids
+ * timezone-shift bugs from re-parsing an already-formatted date. */
+export function toDDMMYYYY(dateStr: string): string {
   const parts = dateStr.split("-");
   if (parts.length === 3 && parts[0].length === 4) {
     const [y, m, d] = parts;
@@ -62,6 +65,22 @@ function toDDMMYYYY(dateStr: string): string {
   return dateStr;
 }
 
+/** Pulls the trailing number out of an invoice number/reference in any
+ * format ("2003", "CNC-INV 2003") — used for consistent filenames. */
+export function extractNumericId(value: string): string {
+  const match = value.match(/(\d+)\s*$/);
+  return match ? match[1] : value;
+}
+
+export function invoiceFilename(invoiceNumber: string): string {
+  return `CNC-INV #${extractNumericId(invoiceNumber)}.pdf`;
+}
+
+export function packingSlipFilename(reference?: string): string {
+  return `CNC-PAK #${reference ? extractNumericId(reference) : "draft"}.pdf`;
+}
+
+/** Preloads /icon-192.png and returns a base64 data URL for embedding in the PDF. */
 export function loadLogoDataUrl(): Promise<string> {
   return new Promise((resolve) => {
     const img = new window.Image();
@@ -73,39 +92,40 @@ export function loadLogoDataUrl(): Promise<string> {
       resolve(canvas.toDataURL("image/png"));
     };
     img.onerror = () => resolve("");
-    img.src = "/icon-512.png";
+    img.src = "/icon-192.png";
   });
 }
 
+/** Shared business header (logo, name, legal name, contact block) + divider. */
 function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | undefined): number {
   const gold = businessConfig.colors.gold;
   const navy = businessConfig.colors.text;
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 40;
 
+  // Title — reduced from 24 to 18pt (was too dominant on the page)
   doc.setFont("helvetica", "bold");
   doc.setFontSize(24);
   doc.setTextColor(gold);
-  doc.text(title, pageWidth / 2, 52, { align: "center" });
+  doc.text(title, pageWidth / 2, 46, { align: "center" });
 
-  if (logoDataUrl) {
-    doc.addImage(logoDataUrl, "PNG", pageWidth - margin - 72, 18, 72, 72);
+ 
+
+  let y = 86;
+   if (logoDataUrl) {
+    doc.addImage(logoDataUrl, "PNG", pageWidth - margin - 72, 50, 72, 72);
   }
-
-  let y = 92;
-
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(15);
+  doc.setFontSize(17); // was 15, +2
   doc.setTextColor(navy);
   doc.text(businessConfig.name, margin, y);
-  y += 19;
+  y += 40;
 
-  // Legal/numbered entity name — bold, black (not italic, per latest request)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(13); // was 11, +2
   doc.setTextColor(navy);
   doc.text(businessConfig.legalName, margin, y);
-  y += 17;
+  y += 18;
 
   const headerLines = [
     businessConfig.contactName,
@@ -125,9 +145,9 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
       doc.setFont("helvetica", "normal");
       doc.setTextColor(navy);
     }
-    doc.setFontSize(11);
+    doc.setFontSize(13); // was 11, +2
     doc.text(line, margin, y);
-    y += 16;
+    y += 17;
   }
 
   doc.setFont("helvetica", "normal");
@@ -142,31 +162,70 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
   return y;
 }
 
+/** Wraps footer/notes text consistently, reused by both the height
+ * calculator and the actual renderer so they can never disagree. */
+function wrapLines(doc: jsPDF, text: string, maxWidth: number): string[] {
+  return text.split("\n").flatMap((line) => doc.splitTextToSize(line, maxWidth) as string[]);
+}
+
+/** Computes how tall the totals+notes+footer block will be, so it can be
+ * pinned to the bottom of whichever page it ends up on. */
+function computeTotalsBlockHeight(
+  doc: jsPDF,
+  data: InvoicePdfData,
+  pageWidth: number,
+  margin: number,
+  combinedFooterText: string
+): number {
+  const rowH = 20;
+  let h = 0;
+  h += rowH; // subtotal
+  if (data.otherChargesAmount) h += rowH;
+  h += rowH; // tax
+  if (data.pstQstAmount > 0 && data.pstQstRateDisplay) h += rowH;
+  h += 20; // line-before-total clearance
+  h += 22; // TOTAL row
+  h += 14; // line-after-total gap
+
+  if (data.extraNotes && data.extraNotes.some((n) => n.trim())) {
+    h += 20;
+    for (const note of data.extraNotes) {
+      if (!note.trim()) continue;
+      h += wrapLines(doc, `\u2022 ${note}`, pageWidth - margin * 2).length * 18;
+    }
+  }
+
+  h += 28 + wrapLines(doc, combinedFooterText, pageWidth - margin * 2).length * 16;
+  return h;
+}
+
 export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const gold = businessConfig.colors.gold;
   const navy = businessConfig.colors.text;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 40;
+  const bottomMargin = 40;
 
   let y = drawBusinessHeader(doc, `INVOICE ${data.invoiceNumber}`, data.logoDataUrl);
 
   const billToTop = y;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(15); // was 13, +2
   doc.setTextColor(navy);
   doc.text("BILL TO:-", margin, y);
-  y += 18;
+  y += 19;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
+  doc.setFontSize(13); // was 11, +2
   doc.text(data.customer.name, margin, y);
-  y += 16;
+  y += 17;
 
   if (data.customer.street) {
     doc.text(data.customer.street, margin, y);
-    y += 16;
+    y += 17;
   }
 
   const cityLine = [data.customer.city, data.customer.province?.province, data.customer.postalCode]
@@ -174,14 +233,14 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
     .join(", ");
   if (cityLine) {
     doc.text(cityLine, margin, y);
-    y += 16;
+    y += 17;
   }
 
   const boxWidth = 252;
   const boxX = pageWidth - margin - boxWidth;
   const boxY = billToTop - 14;
   const colWidth = boxWidth / 3;
-  const rowH = 32;
+  const rowH = 34;
 
   const colFills: [number, number, number][] = [
     [243, 254, 140],
@@ -201,20 +260,20 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   doc.line(boxX, boxY + rowH, boxX + boxWidth, boxY + rowH);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
+  doc.setFontSize(12); // was 10, +2
   doc.setTextColor(navy);
-  doc.text("DATE", boxX + colWidth / 2, boxY + rowH * 0.62, { align: "center" });
-  doc.text("PLEASE PAY", boxX + colWidth + colWidth / 2, boxY + rowH * 0.62, { align: "center" });
-  doc.text("DUE DATE", boxX + colWidth * 2 + colWidth / 2, boxY + rowH * 0.62, { align: "center" });
+  doc.text("DATE", boxX + colWidth / 2, boxY + rowH * 0.6, { align: "center" });
+  doc.text("PLEASE PAY", boxX + colWidth + colWidth / 2, boxY + rowH * 0.6, { align: "center" });
+  doc.text("DUE DATE", boxX + colWidth * 2 + colWidth / 2, boxY + rowH * 0.6, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text(toDDMMYYYY(data.invoiceDate), boxX + colWidth / 2, boxY + rowH + rowH * 0.62, { align: "center" });
-  doc.text(`CAD$ ${money(data.total)}`, boxX + colWidth + colWidth / 2, boxY + rowH + rowH * 0.62, { align: "center" });
+  doc.setFontSize(13); // was 11, +2
+  doc.text(toDDMMYYYY(data.invoiceDate), boxX + colWidth / 2, boxY + rowH + rowH * 0.6, { align: "center" });
+  doc.text(`CAD $${money(data.total)}`, boxX + colWidth + colWidth / 2, boxY + rowH + rowH * 0.6, { align: "center" });
   doc.text(
     data.dueDate ? toDDMMYYYY(data.dueDate) : "-",
     boxX + colWidth * 2 + colWidth / 2,
-    boxY + rowH + rowH * 0.62,
+    boxY + rowH + rowH * 0.6,
     { align: "center" }
   );
 
@@ -228,7 +287,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
 
   autoTable(doc, {
     startY: y + 1,
-    margin: { left: margin, right: margin },
+    margin: { left: margin, right: margin, bottom: bottomMargin },
     head: [["PRODUCT", "DESCRIPTION", "TAX", "QTY", "RATE", "AMOUNT"]],
     body: data.lineItems.map((item) => [
       item.description,
@@ -238,12 +297,12 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
       money(item.unitPrice),
       money(item.quantity * item.unitPrice),
     ]),
-    styles: { fontSize: 11, textColor: navy },
+    styles: { fontSize: 13, textColor: navy }, // was 11, +2
     headStyles: {
       fillColor: [255, 255, 255],
       textColor: navy,
       fontStyle: "bold",
-      fontSize: 11,
+      fontSize: 13, // was 11, +2
     },
     theme: "plain",
     didDrawCell: (hookData) => {
@@ -261,11 +320,28 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   const finalTableY = (doc as any).lastAutoTable.finalY;
   doc.line(margin, finalTableY, pageWidth - margin, finalTableY);
 
-  let totalsY = finalTableY + 20;
-  const labelX = pageWidth - margin - 210;
+  // ── Footer text: default clause always stays, manually-typed note is
+  // appended after it rather than replacing it ──────────────────────────────
+  const combinedFooterText = data.footerNote
+    ? `${businessConfig.defaultFooterNote}\n${data.footerNote}`
+    : businessConfig.defaultFooterNote;
+
+  // ── Pin totals+notes+footer to the bottom of the page — same page as the
+  // table if there's room, otherwise a fresh page, per the requested layout ──
+  const blockHeight = computeTotalsBlockHeight(doc, data, pageWidth, margin, combinedFooterText);
+  const availableSpace = pageHeight - bottomMargin - finalTableY;
+  let totalsY: number;
+  if (blockHeight <= availableSpace) {
+    totalsY = pageHeight - bottomMargin - blockHeight;
+  } else {
+    doc.addPage();
+    totalsY = pageHeight - bottomMargin - blockHeight;
+  }
+
+  const labelX = pageWidth - margin - 250;
   const valueX = pageWidth - margin - 10;
 
-  doc.setFontSize(11);
+  doc.setFontSize(13); // was 11, +2
 
   doc.setFont("helvetica", "bold");
   doc.setTextColor(gold);
@@ -273,7 +349,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(navy);
   doc.text(money(data.subtotal), valueX, totalsY, { align: "right" });
-  totalsY += 18;
+  totalsY += 20;
 
   if (data.otherChargesAmount) {
     doc.setFont("helvetica", "bold");
@@ -282,7 +358,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(navy);
     doc.text(money(data.otherChargesAmount), valueX, totalsY, { align: "right" });
-    totalsY += 18;
+    totalsY += 20;
   }
 
   doc.setFont("helvetica", "bold");
@@ -291,7 +367,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(navy);
   doc.text(money(data.gstHstAmount), valueX, totalsY, { align: "right" });
-  totalsY += 18;
+  totalsY += 20;
 
   if (data.pstQstAmount > 0 && data.pstQstRateDisplay) {
     doc.setFont("helvetica", "bold");
@@ -300,76 +376,84 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(navy);
     doc.text(money(data.pstQstAmount), valueX, totalsY, { align: "right" });
-    totalsY += 18;
+    totalsY += 20;
   }
 
-  totalsY += 4;
+  // ── Line before total — then advance a generous, fixed gap before drawing
+  // the text baseline, instead of the old fixed-offset-behind-the-line
+  // approach that let the line clip through the text's ascenders ───────────
   doc.setDrawColor(0);
   doc.setLineWidth(0.5);
-  doc.line(margin, totalsY - 8, pageWidth - margin, totalsY - 8);
+  doc.line(margin, totalsY, pageWidth - margin, totalsY);
+  totalsY += 20;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(15); // was 13, +2
   doc.setTextColor(gold);
   doc.text("TOTAL AMOUNT.", labelX, totalsY);
   doc.setTextColor(navy);
   doc.text(`CAD$ ${money(data.total)}`, valueX, totalsY, { align: "right" });
 
-  totalsY += 12;
+  totalsY += 14;
   doc.setDrawColor(0);
   doc.line(margin, totalsY, pageWidth - margin, totalsY);
 
-  if (data.extraNotes && data.extraNotes.length > 0) {
+  if (data.extraNotes && data.extraNotes.some((n) => n.trim())) {
     let notesY = totalsY + 20;
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
+    doc.setFontSize(13); // was 11, +2
     doc.setTextColor(navy);
     for (const note of data.extraNotes) {
       if (!note.trim()) continue;
-      doc.text(`\u2022 ${note}`, margin, notesY, { maxWidth: pageWidth - margin * 2 });
-      notesY += 16;
+      const lines = wrapLines(doc, `\u2022 ${note}`, pageWidth - margin * 2);
+      for (const line of lines) {
+        doc.text(line, margin, notesY);
+        notesY += 18;
+      }
     }
     totalsY = notesY - 4;
   }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(13); // was 11, +2
   doc.setTextColor(navy);
-  const footerText = data.footerNote ?? businessConfig.defaultFooterNote;
-  doc.text(footerText, margin, totalsY + 26, { maxWidth: pageWidth - margin * 2 });
+  const footerLines = wrapLines(doc, combinedFooterText, pageWidth - margin * 2);
+  let footerY = totalsY + 28;
+  for (const line of footerLines) {
+    doc.text(line, margin, footerY);
+    footerY += 16;
+  }
 
   return doc;
 }
 
+/** Driver-facing packing slip — same header/branding as the invoice, but
+ * deliberately has no prices, tax, or totals anywhere on the page. */
 export function generatePackingSlipPdf(data: PackingSlipPdfData): jsPDF {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const navy = businessConfig.colors.text;
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 40;
 
-  let y = drawBusinessHeader(doc, "PACKING SLIP", data.logoDataUrl);
-
-  if (data.invoiceNumber) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(150);
-    doc.text(`Ref: Invoice ${data.invoiceNumber}`, margin, y - 10);
-  }
+  // Heading includes the reference number directly (e.g. "PACKING SLIP
+  // 2003") instead of a separate small "Ref:" line below the header.
+  const title = data.invoiceNumber ? `PACKING SLIP ${data.invoiceNumber}` : "PACKING SLIP";
+  let y = drawBusinessHeader(doc, title, data.logoDataUrl);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
+  doc.setFontSize(15); // was 13, +2
   doc.setTextColor(navy);
   doc.text("SHIP TO:-", margin, y);
-  y += 18;
+  y += 19;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
+  doc.setFontSize(13); // was 11, +2
   doc.text(data.customer.name, margin, y);
-  y += 16;
+  y += 17;
 
   if (data.customer.street) {
     doc.text(data.customer.street, margin, y);
-    y += 16;
+    y += 17;
   }
 
   const cityLine = [data.customer.city, data.customer.province?.province, data.customer.postalCode]
@@ -377,12 +461,13 @@ export function generatePackingSlipPdf(data: PackingSlipPdfData): jsPDF {
     .join(", ");
   if (cityLine) {
     doc.text(cityLine, margin, y);
-    y += 16;
+    y += 17;
   }
 
   doc.setFont("helvetica", "bold");
+  doc.setFontSize(13); // was inheriting 11, now explicit +2
   doc.text(`Ship Date: ${toDDMMYYYY(data.shipDate)}`, margin, y);
-  y += 24;
+  y += 26;
 
   doc.setDrawColor(0);
   doc.setLineWidth(0.5);
@@ -393,12 +478,12 @@ export function generatePackingSlipPdf(data: PackingSlipPdfData): jsPDF {
     margin: { left: margin, right: margin },
     head: [["PRODUCT", "DESCRIPTION", "QTY"]],
     body: data.lineItems.map((item) => [item.description, item.activity, String(item.quantity)]),
-    styles: { fontSize: 11, textColor: navy },
+    styles: { fontSize: 13, textColor: navy }, // was 11, +2
     headStyles: {
       fillColor: [255, 255, 255],
       textColor: navy,
       fontStyle: "bold",
-      fontSize: 11,
+      fontSize: 13, // was 11, +2
     },
     theme: "plain",
   });

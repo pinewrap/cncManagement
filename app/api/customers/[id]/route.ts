@@ -5,11 +5,16 @@ import { invoiceTotals, taxLabel } from "@/lib/calculations";
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const months = parseInt(req.nextUrl.searchParams.get("months") ?? "3", 10);
-  const since = new Date();
-  since.setMonth(since.getMonth() - months);
+  const allTime = months === 0;
+
+  let since: Date | undefined;
+  if (!allTime) {
+    since = new Date();
+    since.setMonth(since.getMonth() - months);
+  }
 
   const invoices = await prisma.invoice.findMany({
-    where: { customerId: id, invoiceDate: { gte: since } },
+    where: { customerId: id, ...(since ? { invoiceDate: { gte: since } } : {}) },
     include: {
       customer: { include: { province: true } },
       lineItems: { include: { product: true } },

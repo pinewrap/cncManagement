@@ -9,21 +9,21 @@ export const products = [
   { sku: "ELIGATE-RED-KEG-50KG", name: "Eligate Red Gel", variant: null, packageType: "Keg", packageSize: 50, unit: "kg" },
   { sku: "ELIGATE-RED-PAIL-16KG", name: "Eligate Red Gel", variant: null, packageType: "Pail", packageSize: 16, unit: "kg" },
   { sku: "ELIGATE-RED-TUB-2KG", name: "Eligate Red Gel", variant: null, packageType: "Tub", packageSize: 2, unit: "kg" },
-  { sku: "ELIGATE-RED-TUB-500G", name: "Eligate Red Gel", variant: null, packageType: "Tub", packageSize: 0.5, unit: "kg" },
-  { sku: "ELIGATE-RED-TUBE-400G", name: "Eligate Red Gel", variant: null, packageType: "Tube", packageSize: 0.4, unit: "kg" },
-  { sku: "ELIGATE-RED-POUCH-200G", name: "Eligate Red Gel", variant: null, packageType: "Pouch", packageSize: 0.2, unit: "kg" },
+  { sku: "ELIGATE-RED-TUB-500G", name: "Eligate Red Gel", variant: null, packageType: "Tub", packageSize: 500, unit: "gm" },
+  { sku: "ELIGATE-RED-TUBE-400G", name: "Eligate Red Gel", variant: null, packageType: "Tube", packageSize: 400, unit: "gm" },
+  { sku: "ELIGATE-RED-POUCH-200G", name: "Eligate Red Gel", variant: null, packageType: "Pouch", packageSize: 200, unit: "gm" },
 
   // 2. Ocean Blue Gel
   { sku: "OCEAN-BLUE-PAIL-16KG", name: "Ocean Blue Gel", variant: null, packageType: "Pail", packageSize: 16, unit: "kg" },
-  { sku: "OCEAN-BLUE-TUBE-400G", name: "Ocean Blue Gel", variant: null, packageType: "Tube", packageSize: 0.4, unit: "kg" },
+  { sku: "OCEAN-BLUE-TUBE-400G", name: "Ocean Blue Gel", variant: null, packageType: "Tube", packageSize: 400, unit: "gm" },
 
   // 3. Automatic Grease Hector — EP"0" and EP"00"
   { sku: "HECTOR-EP0-KEG-50KG", name: "Automatic Grease Hector", variant: "EP0", packageType: "Keg", packageSize: 50, unit: "kg" },
   { sku: "HECTOR-EP0-PAIL-16KG", name: "Automatic Grease Hector", variant: "EP0", packageType: "Pail", packageSize: 16, unit: "kg" },
-  { sku: "HECTOR-EP0-TUBE-400G", name: "Automatic Grease Hector", variant: "EP0", packageType: "Tube", packageSize: 0.4, unit: "kg" },
+  { sku: "HECTOR-EP0-TUBE-400G", name: "Automatic Grease Hector", variant: "EP0", packageType: "Tube", packageSize: 400, unit: "gm" },
   { sku: "HECTOR-EP00-KEG-50KG", name: "Automatic Grease Hector", variant: "EP00", packageType: "Keg", packageSize: 50, unit: "kg" },
   { sku: "HECTOR-EP00-PAIL-16KG", name: "Automatic Grease Hector", variant: "EP00", packageType: "Pail", packageSize: 16, unit: "kg" },
-  { sku: "HECTOR-EP00-TUBE-400G", name: "Automatic Grease Hector", variant: "EP00", packageType: "Tube", packageSize: 0.4, unit: "kg" },
+  { sku: "HECTOR-EP00-TUBE-400G", name: "Automatic Grease Hector", variant: "EP00", packageType: "Tube", packageSize: 400, unit: "gm" },
 
   // 4. Synth 75W90 Gear Oil
   { sku: "GEAR-75W90-DRUM-208L", name: "Gear Oil", variant: "Synth 75W90", packageType: "Drum", packageSize: 208, unit: "L" },

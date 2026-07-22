@@ -191,6 +191,7 @@ export default function CustomersPage() {
                   <option value={3}>Last 3 months</option>
                   <option value={6}>Last 6 months</option>
                   <option value={12}>Last 12 months</option>
+                  <option value={0}>All time</option>
                 </select>
               </div>
               <button
@@ -207,8 +208,8 @@ export default function CustomersPage() {
           {lookupResult && (
             <div className="mt-4">
               <div className="mb-3 text-sm font-medium text-gray-700">
-                {lookupCustomer?.name} — last {lookupMonths} month{lookupMonths !== 1 ? "s" : ""}
-              </div>
+  {lookupCustomer?.name} — {lookupMonths === 0 ? "all time" : `last ${lookupMonths} month${lookupMonths !== 1 ? "s" : ""}`}
+</div>
 
               {lookupResult.invoiceCount === 0 ? (
                 <p className="text-sm text-gray-400">No invoices in this period.</p>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { generateInvoicePdf, loadLogoDataUrl } from "@/lib/pdf";
+import { generateInvoicePdf, loadLogoDataUrl, invoiceFilename } from "@/lib/pdf";
 import CustomerSearch from "@/components/CustomerSearch";
 
 type Customer = { id: string; name: string };
@@ -45,6 +45,7 @@ export default function InvoicesPage() {
   const [fetching, setFetching] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("UNPAID");
   const [toggling, setToggling] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -89,6 +90,25 @@ export default function InvoicesPage() {
     setToggling(null);
   }
 
+  async function handleDelete(inv: InvoiceListItem) {
+    if (
+      !confirm(
+        `Delete invoice ${inv.invoiceNumber} for ${inv.customer.name}? This also reverses the stock that was deducted when it was created. This can't be undone.`
+      )
+    )
+      return;
+    setDeletingId(inv.id);
+    const res = await fetch(`/api/invoices/${inv.id}`, { method: "DELETE" });
+    setDeletingId(null);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "Couldn't delete this invoice.");
+      return;
+    }
+    setResults((prev) => (prev ? prev.filter((r) => r.id !== inv.id) : prev));
+    setTotalCount((prev) => (prev !== null ? prev - 1 : prev));
+  }
+
   async function download(inv: InvoiceListItem) {
     const logoDataUrl = await loadLogoDataUrl();
     const doc = generateInvoicePdf({
@@ -118,7 +138,7 @@ export default function InvoicesPage() {
       total: inv.total,
       footerNote: inv.footerNote,
     });
-    doc.save(`invoice-${inv.invoiceNumber}.pdf`);
+    doc.save(invoiceFilename(inv.invoiceNumber));
   }
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);
@@ -274,6 +294,13 @@ export default function InvoicesPage() {
                                 className="whitespace-nowrap text-brand-navy underline"
                               >
                                 PDF
+                              </button>
+                              <button
+                                disabled={deletingId === inv.id}
+                                onClick={() => handleDelete(inv)}
+                                className="whitespace-nowrap text-xs text-red-600 underline disabled:opacity-40"
+                              >
+                                {deletingId === inv.id ? "Deleting…" : "Delete"}
                               </button>
                             </div>
                           </td>

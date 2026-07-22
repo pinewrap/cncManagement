@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel } from "@/lib/calculations";
-import { generateInvoicePdf, generatePackingSlipPdf, loadLogoDataUrl } from "@/lib/pdf";
+import { generateInvoicePdf, generatePackingSlipPdf, loadLogoDataUrl, invoiceFilename, packingSlipFilename } from "@/lib/pdf";
 import InvoicePreview from "@/components/InvoicePreview";
 
 type Province = { province: string; taxType: string; gstHstRate: string; pstQstRate: string };
@@ -54,6 +54,17 @@ const emptyCustomerForm = {
   provinceId: "",
 };
 
+// Due date defaults to one month out, using local date parts (not
+// toISOString/UTC) to avoid an off-by-one-day shift depending on timezone.
+function defaultDueDate(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function NewInvoicePage() {
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -68,7 +79,7 @@ export default function NewInvoicePage() {
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [otherChargesLabel, setOtherChargesLabel] = useState("");
   const [otherChargesAmount, setOtherChargesAmount] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [dueDate, setDueDate] = useState(defaultDueDate());
   const [footerNote, setFooterNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -144,29 +155,29 @@ export default function NewInvoicePage() {
   const taxLabelDisplay = rates ? getTaxLabel(rates.taxType) : null;
 
   async function handlePackingSlip() {
-  if (!selectedCustomer) {
-    alert("Select or add a customer first.");
-    return;
+    if (!selectedCustomer) {
+      alert("Select or add a customer first.");
+      return;
+    }
+    const validLines = lineItems.filter((li) => li.description && li.quantity);
+    if (validLines.length === 0) {
+      alert("Add at least one line item.");
+      return;
+    }
+    const logoDataUrl = await loadLogoDataUrl();
+    const doc = generatePackingSlipPdf({
+      invoiceNumber: invoiceNumber.trim() || undefined,
+      shipDate: new Date().toLocaleDateString("en-CA"),
+      logoDataUrl,
+      customer: selectedCustomer,
+      lineItems: validLines.map((li) => ({
+        activity: li.activity,
+        description: li.description,
+        quantity: parseFloat(li.quantity) || 0,
+      })),
+    });
+    doc.save(packingSlipFilename(invoiceNumber.trim() || undefined));
   }
-  const validLines = lineItems.filter((li) => li.description && li.quantity);
-  if (validLines.length === 0) {
-    alert("Add at least one line item.");
-    return;
-  }
-  const logoDataUrl = await loadLogoDataUrl();
-  const doc = generatePackingSlipPdf({
-    invoiceNumber: invoiceNumber.trim() || undefined,
-    shipDate: new Date().toLocaleDateString("en-CA"),
-    logoDataUrl,
-    customer: selectedCustomer,
-    lineItems: validLines.map((li) => ({
-      activity: li.activity,
-      description: li.description,
-      quantity: parseFloat(li.quantity) || 0,
-    })),
-  });
-  doc.save(`packing-slip-${invoiceNumber.trim() || "draft"}.pdf`);
-}
 
   async function handleSubmit() {
     if (!selectedCustomer) {
@@ -230,7 +241,7 @@ export default function NewInvoicePage() {
         })
       ),
     ]);
-    doc.save(`invoice-${invoice.invoiceNumber}.pdf`);
+    doc.save(invoiceFilename(invoice.invoiceNumber));
 
     router.push("/invoices");
   }
@@ -460,7 +471,7 @@ export default function NewInvoicePage() {
           onChange={(e) => setDueDate(e.target.value)}
         />
         <input
-          placeholder="Footer note override — optional"
+          placeholder="Additional footer note — optional (default clause always stays, this adds to it)"
           className="rounded border px-3 py-2"
           value={footerNote}
           onChange={(e) => setFooterNote(e.target.value)}
@@ -504,6 +515,7 @@ export default function NewInvoicePage() {
         <div className="overflow-x-auto">
         <div className="min-w-[600px]">
         <InvoicePreview
+          invoiceNumber={invoiceNumber || undefined}
           invoiceDate={new Date().toLocaleDateString("en-CA")}
           dueDate={dueDate}
           customer={selectedCustomer}
