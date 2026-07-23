@@ -125,7 +125,7 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
   doc.setFontSize(13); // was 11, +2
   doc.setTextColor(navy);
   doc.text(businessConfig.legalName, margin, y);
-  y += 18;
+  y += 22;
 
   const headerLines = [
     businessConfig.contactName,
@@ -205,7 +205,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   const navy = businessConfig.colors.text;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 40;
+  const margin = 30;
   const bottomMargin = 40;
 
   let y = drawBusinessHeader(doc, `INVOICE ${data.invoiceNumber}`, data.logoDataUrl);
@@ -233,7 +233,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
     .join(", ");
   if (cityLine) {
     doc.text(cityLine, margin, y);
-    y += 17;
+    y += 4;
   }
 
   const boxWidth = 252;
