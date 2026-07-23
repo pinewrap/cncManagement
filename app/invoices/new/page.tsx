@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel } from "@/lib/calculations";
+import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel, comparePackageSizeDesc } from "@/lib/calculations";
 import { generateInvoicePdf, generatePackingSlipPdf, loadLogoDataUrl, invoiceFilename, packingSlipFilename } from "@/lib/pdf";
 import InvoicePreview from "@/components/InvoicePreview";
 
@@ -65,6 +65,14 @@ function defaultDueDate(): string {
   return `${y}-${m}-${day}`;
 }
 
+function defaultTodayDate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default function NewInvoicePage() {
   const router = useRouter();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -80,6 +88,7 @@ export default function NewInvoicePage() {
   const [otherChargesLabel, setOtherChargesLabel] = useState("");
   const [otherChargesAmount, setOtherChargesAmount] = useState("");
   const [dueDate, setDueDate] = useState(defaultDueDate());
+  const [invoiceDate, setInvoiceDate] = useState(defaultTodayDate());
   const [footerNote, setFooterNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -197,6 +206,7 @@ export default function NewInvoicePage() {
       body: JSON.stringify({
         customerId: selectedCustomer.id,
         invoiceNumber: invoiceNumber.trim() || undefined,
+        invoiceDate: invoiceDate || undefined,
         dueDate: dueDate || undefined,
         otherChargesLabel: otherChargesLabel || undefined,
         otherChargesAmount: parseFloat(otherChargesAmount) || undefined,
@@ -361,6 +371,17 @@ export default function NewInvoicePage() {
       {/* Line items */}
       <section className="rounded-lg border bg-white p-4">
         <h2 className="mb-2 font-medium">Line items</h2>
+        <div className="mb-3 max-w-xs">
+          <label className="mb-1 block text-xs text-gray-500">
+            Invoice Date (defaults to today — change for backdated/future invoices)
+          </label>
+          <input
+            type="date"
+            className="rounded border px-3 py-2 text-sm"
+            value={invoiceDate}
+            onChange={(e) => setInvoiceDate(e.target.value)}
+          />
+        </div>
         <div className="flex flex-col gap-3">
           {lineItems.map((line, i) => {
             const selectedLine = productLines.find((l) => l.key === line.lineKey);
@@ -385,7 +406,7 @@ export default function NewInvoicePage() {
                 onChange={(e) => handlePackagePick(i, e.target.value)}
               >
                 <option value="">2. Select package...</option>
-                {selectedLine?.products.map((p) => (
+                {selectedLine?.products.slice().sort(comparePackageSizeDesc).map((p) => (
                   <option key={p.id} value={p.id}>
                     {packageLabel(p)}
                   </option>
@@ -516,7 +537,7 @@ export default function NewInvoicePage() {
         <div className="min-w-[600px]">
         <InvoicePreview
           invoiceNumber={invoiceNumber || undefined}
-          invoiceDate={new Date().toLocaleDateString("en-CA")}
+          invoiceDate={invoiceDate}
           dueDate={dueDate}
           customer={selectedCustomer}
           lineItems={lineItems

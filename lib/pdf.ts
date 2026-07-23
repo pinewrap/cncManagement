@@ -101,7 +101,7 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
   const gold = businessConfig.colors.gold;
   const navy = businessConfig.colors.text;
   const pageWidth = doc.internal.pageSize.getWidth();
-  const margin = 40;
+  const margin = 30;
 
   // Title — reduced from 24 to 18pt (was too dominant on the page)
   doc.setFont("helvetica", "bold");
@@ -119,7 +119,7 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
   doc.setFontSize(17); // was 15, +2
   doc.setTextColor(navy);
   doc.text(businessConfig.name, margin, y);
-  y += 40;
+  y += 20;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13); // was 11, +2
@@ -318,7 +318,6 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const finalTableY = (doc as any).lastAutoTable.finalY;
-  doc.line(margin, finalTableY, pageWidth - margin, finalTableY);
 
   // ── Footer text: default clause always stays, manually-typed note is
   // appended after it rather than replacing it ──────────────────────────────
@@ -342,6 +341,13 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   const valueX = pageWidth - margin - 10;
 
   doc.setFontSize(13); // was 11, +2
+
+  // Divider line moved here — directly above the totals block instead of
+  // right after the table, since totals are bottom-pinned and can sit far
+  // down the page from where the table actually ends.
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.line(margin, totalsY - 16, pageWidth - margin, totalsY - 16);
 
   doc.setFont("helvetica", "bold");
   doc.setTextColor(gold);
@@ -487,6 +493,41 @@ export function generatePackingSlipPdf(data: PackingSlipPdfData): jsPDF {
     },
     theme: "plain",
   });
+
+  // ── Name / Signature block — bottom-pinned like the invoice's totals,
+  // so it sits near the bottom of the page regardless of line item count,
+  // and moves to a fresh page rather than crowding a long table ──────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const finalTableY = (doc as any).lastAutoTable.finalY;
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottomMargin = 40;
+  const labelGap = 16;
+
+  let lineY: number;
+  if (finalTableY + 60 <= pageHeight - bottomMargin) {
+    lineY = pageHeight - bottomMargin - labelGap;
+  } else {
+    doc.addPage();
+    lineY = pageHeight - bottomMargin - labelGap;
+  }
+
+  const colGap = 40;
+  const colWidth = (pageWidth - margin * 2 - colGap) / 2;
+  const nameLineStart = margin;
+  const nameLineEnd = margin + colWidth;
+  const signLineStart = pageWidth - margin - colWidth;
+  const signLineEnd = pageWidth - margin;
+
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.75);
+  doc.line(nameLineStart, lineY, nameLineEnd, lineY);
+  doc.line(signLineStart, lineY, signLineEnd, lineY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(navy);
+  doc.text("Name", nameLineStart, lineY + labelGap);
+  doc.text("Signature", signLineStart, lineY + labelGap);
 
   return doc;
 }

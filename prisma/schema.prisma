@@ -24,6 +24,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Product {
@@ -69,7 +70,7 @@ enum EntryUnit {
 model StockTransaction {
   id            String    @id @default(cuid())
   productId     String
-  product       Product   @relation(fields: [productId], references: [id])
+  product       Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   txnDate       DateTime  @default(now())
   txnType       TxnType
   entryUnit     EntryUnit @default(BASE_UNIT)
@@ -125,7 +126,7 @@ model Invoice {
   otherChargesLabel  String? // e.g. "Freight" — null if not used on this invoice
   otherChargesAmount Decimal       @default(0) @db.Decimal(10, 2)
   footerNote         String? // e.g. retention-of-title clause — varies per invoice in the reference PDFs
-  extraNotes         String? 
+  extraNotes         String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
@@ -139,7 +140,7 @@ model InvoiceLineItem {
   invoiceId   String
   invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   productId   String?
-  product     Product? @relation(fields: [productId], references: [id])
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
   activity    String // e.g. "Drum (181.4KG)" — derived from product's package info, editable
   description String // e.g. "Eligate Gel" — defaults from product name+variant, freely editable per invoice
   unitPrice   Decimal  @db.Decimal(10, 2) // set per invoice — products intentionally have no fixed price

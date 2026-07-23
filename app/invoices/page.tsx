@@ -295,6 +295,12 @@ export default function InvoicesPage() {
                               >
                                 PDF
                               </button>
+                              <Link
+                                href={`/invoices/${inv.id}/edit`}
+                                className="whitespace-nowrap text-brand-navy underline"
+                              >
+                                Edit
+                              </Link>
                               <button
                                 disabled={deletingId === inv.id}
                                 onClick={() => handleDelete(inv)}

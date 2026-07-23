@@ -4,17 +4,23 @@ import { invoiceTotals, taxLabel } from "@/lib/calculations";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const months = parseInt(req.nextUrl.searchParams.get("months") ?? "3", 10);
-  const allTime = months === 0;
+  const fromParam = req.nextUrl.searchParams.get("from");
+  const toParam = req.nextUrl.searchParams.get("to");
 
-  let since: Date | undefined;
-  if (!allTime) {
-    since = new Date();
-    since.setMonth(since.getMonth() - months);
-  }
+  const from = fromParam ? new Date(fromParam) : undefined;
+  // Include the entire "to" day (not just midnight), so an invoice created
+  // later on that date isn't excluded.
+  const to = toParam ? new Date(`${toParam}T23:59:59.999`) : undefined;
+
+  const dateFilter: { gte?: Date; lte?: Date } = {};
+  if (from) dateFilter.gte = from;
+  if (to) dateFilter.lte = to;
 
   const invoices = await prisma.invoice.findMany({
-    where: { customerId: id, ...(since ? { invoiceDate: { gte: since } } : {}) },
+    where: {
+      customerId: id,
+      ...(Object.keys(dateFilter).length > 0 ? { invoiceDate: dateFilter } : {}),
+    },
     include: {
       customer: { include: { province: true } },
       lineItems: { include: { product: true } },
@@ -87,16 +93,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
- 
+
   const invoiceCount = await prisma.invoice.count({ where: { customerId: id } });
- 
+
   if (invoiceCount > 0) {
     return NextResponse.json(
       { error: "This customer has invoices on file and can't be deleted." },
       { status: 409 }
     );
   }
- 
+
   await prisma.customer.delete({ where: { id } });
   return NextResponse.json({ deleted: true });
 }

@@ -16,7 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { groupProductLines, packageLabel } from "@/lib/calculations";
+import { groupProductLines, packageLabel, comparePackageSizeDesc } from "@/lib/calculations";
 
 type Product = {
   id: string;
@@ -206,7 +206,12 @@ export default function StockPage() {
 
   // ── Delete (single SKU/package) ────────────────────────────────────────────
   async function handleDeleteSku(productId: string, label: string) {
-    if (!confirm(`Delete "${label}"? This can't be undone.`)) return;
+    if (
+      !confirm(
+        `Delete "${label}"? This removes it and its stock history completely. Any past invoices that included it are unaffected — they keep showing their own saved description/price. This can't be undone.`
+      )
+    )
+      return;
     setDeletingId(productId);
     const res = await fetch(`/api/products/${productId}`, { method: "DELETE" });
     setDeletingId(null);
@@ -233,7 +238,7 @@ export default function StockPage() {
     return Array.from(stockByLine.entries()).map(([key, items]) => ({
       key,
       label: [items[0].name, items[0].variant].filter(Boolean).join(" "),
-      items: [...items].sort((a, b) => (b.packageSize ?? 0) - (a.packageSize ?? 0)),
+      items: [...items].sort(comparePackageSizeDesc),
       totalBaseUnits: items.reduce((s, i) => s + i.baseUnits, 0),
     }));
   }, [stockByLine]);
@@ -339,7 +344,7 @@ export default function StockPage() {
             <option value="">2. Select package...</option>
             {selectedTxnLine?.products
               .slice()
-              .sort((a, b) => (Number(b.packageSize ?? 0) || 0) - (Number(a.packageSize ?? 0) || 0))
+              .sort(comparePackageSizeDesc)
               .map((p) => <option key={p.id} value={p.id}>{packageLabel(p)}</option>)}
           </select>
           <select className="rounded border px-3 py-2" value={txnForm.txnType}
@@ -617,7 +622,7 @@ function InventoryLineRow({
                     disabled={deletingId === level.id}
                     onClick={() => handleDeleteSku(level.id, `${line.label} — ${label}`)}
                     className="text-xs text-red-600 underline disabled:opacity-50"
-                    title="Delete this product (only allowed if it has no stock/invoice history)"
+                    title="Delete this product completely — past invoices are unaffected"
                   >
                     {deletingId === level.id ? "..." : "Delete"}
                   </button>

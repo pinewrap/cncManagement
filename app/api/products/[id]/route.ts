@@ -24,15 +24,15 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     prisma.invoiceLineItem.count({ where: { productId: id } }),
   ]);
 
-  if (stockCount > 0 || lineItemCount > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "This product has stock or invoice history and can't be deleted — rename it instead if it's discontinued.",
-      },
-      { status: 409 }
-    );
-  }
+//   if (stockCount > 0 || lineItemCount > 0) {
+//     return NextResponse.json(
+//       {
+//         error:
+//           "This product has stock or invoice history and can't be deleted — rename it instead if it's discontinued.",
+//       },
+//       { status: 409 }
+//     );
+//   }
 
   await prisma.product.delete({ where: { id } });
   return NextResponse.json({ deleted: true });

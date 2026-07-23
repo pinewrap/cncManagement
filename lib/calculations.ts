@@ -73,6 +73,29 @@ export function groupProductLines(products: ProductForGrouping[]): ProductLine[]
 }
 
 /** e.g. "Drum - 181.4kg" — the second dropdown, scoped to whichever product line was picked. */
+/** Normalizes a package size to a common "large unit" scale (kg/L) so that
+ * mixed-unit sorting compares true physical size, not raw numbers — without
+ * this, "500 gm" would sort above "2 kg" since 500 > 2 numerically. */
+function normalizedPackageSize(size: number, unit: string): number {
+  const u = unit.toLowerCase();
+  if (u === "gm" || u === "g" || u === "ml") return size / 1000;
+  return size;
+}
+
+/** Descending comparator for package size, unit-aware. Use this anywhere
+ * packages within a product line are listed or sorted — dropdowns, the
+ * inventory display, anywhere — so a newly added package (any size, any
+ * unit) automatically lands in the correct largest-to-smallest position
+ * with no manual ordering needed. */
+export function comparePackageSizeDesc(
+  a: { packageSize?: Decimal | number | string | null; unit: string },
+  b: { packageSize?: Decimal | number | string | null; unit: string }
+): number {
+  const aSize = normalizedPackageSize(Number(a.packageSize ?? 0), a.unit);
+  const bSize = normalizedPackageSize(Number(b.packageSize ?? 0), b.unit);
+  return bSize - aSize;
+}
+
 export function packageLabel(p: { packageType?: string | null; packageSize?: Decimal | number | string | null; unit: string }): string {
   if (!p.packageType) return p.unit;
   const size = p.packageSize != null ? `${Number(p.packageSize)}${p.unit}` : p.unit;
@@ -139,14 +162,14 @@ export function taxLabel(taxType: string): string {
 }
 
 /**
- * Plain sequential invoice number, matching CNC's existing format (e.g. "3016",
- * not "INV-2026-3016"). Pass in the highest existing number so it continues
- * the client's real sequence instead of restarting at 1.
+ * Next invoice number in CNC's format, e.g. "CNC-INV 3017". Pass in the
+ * highest existing number (see extractInvoiceNumber below) so it continues
+ * the real sequence.
  */
 export function nextInvoiceNumber(lastInvoiceNumber: number): string {
   return `CNC-INV ${lastInvoiceNumber + 1}`;
 }
- 
+
 /** Pulls the trailing number out of any invoice number format — handles old
  * plain-number invoices ("3016"), the new "CNC-INV 3017" format, and any
  * manually-typed custom number, as long as it ends in digits. */

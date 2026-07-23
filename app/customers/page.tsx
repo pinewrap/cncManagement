@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import CustomerSearch from "@/components/CustomerSearch";
+import { toDDMMYYYY } from "@/lib/pdf";
 
 type Province = { province: string; taxType: string };
 type Customer = {
@@ -47,7 +48,8 @@ export default function CustomersPage() {
   // Lookup panel state
   const [showLookup, setShowLookup] = useState(false);
   const [lookupCustomerId, setLookupCustomerId] = useState("");
-  const [lookupMonths, setLookupMonths] = useState(3);
+  const [lookupFrom, setLookupFrom] = useState("");
+  const [lookupTo, setLookupTo] = useState("");
   const [lookupLoading, setLookupLoading] = useState(false);
   const [lookupResult, setLookupResult] = useState<CustomerDetail | null>(null);
 
@@ -116,7 +118,10 @@ export default function CustomersPage() {
     if (!lookupCustomerId) return;
     setLookupLoading(true);
     setLookupResult(null);
-    const res = await fetch(`/api/customers/${lookupCustomerId}?months=${lookupMonths}`);
+    const params = new URLSearchParams();
+    if (lookupFrom) params.set("from", lookupFrom);
+    if (lookupTo) params.set("to", lookupTo);
+    const res = await fetch(`/api/customers/${lookupCustomerId}?${params}`);
     setLookupResult(await res.json());
     setLookupLoading(false);
   }
@@ -181,18 +186,22 @@ export default function CustomersPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-gray-500">Period</label>
-                <select
+                <label className="mb-1 block text-xs text-gray-500">From</label>
+                <input
+                  type="date"
                   className="rounded border px-3 py-2 text-sm"
-                  value={lookupMonths}
-                  onChange={(e) => { setLookupMonths(Number(e.target.value)); setLookupResult(null); }}
-                >
-                  <option value={1}>Last 1 month</option>
-                  <option value={3}>Last 3 months</option>
-                  <option value={6}>Last 6 months</option>
-                  <option value={12}>Last 12 months</option>
-                  <option value={0}>All time</option>
-                </select>
+                  value={lookupFrom}
+                  onChange={(e) => { setLookupFrom(e.target.value); setLookupResult(null); }}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-500">To</label>
+                <input
+                  type="date"
+                  className="rounded border px-3 py-2 text-sm"
+                  value={lookupTo}
+                  onChange={(e) => { setLookupTo(e.target.value); setLookupResult(null); }}
+                />
               </div>
               <button
                 disabled={!lookupCustomerId || lookupLoading}
@@ -208,8 +217,11 @@ export default function CustomersPage() {
           {lookupResult && (
             <div className="mt-4">
               <div className="mb-3 text-sm font-medium text-gray-700">
-  {lookupCustomer?.name} — {lookupMonths === 0 ? "all time" : `last ${lookupMonths} month${lookupMonths !== 1 ? "s" : ""}`}
-</div>
+                {lookupCustomer?.name} —{" "}
+                {lookupFrom || lookupTo
+                  ? `${lookupFrom ? toDDMMYYYY(lookupFrom) : "the beginning"} to ${lookupTo ? toDDMMYYYY(lookupTo) : "today"}`
+                  : "all time"}
+              </div>
 
               {lookupResult.invoiceCount === 0 ? (
                 <p className="text-sm text-gray-400">No invoices in this period.</p>
