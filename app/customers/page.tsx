@@ -11,6 +11,7 @@ type Customer = {
   phone: string | null;
   email: string | null;
   street: string | null;
+  poBox: string | null;
   city: string | null;
   postalCode: string | null;
   createdAt: string;
@@ -26,7 +27,7 @@ type CustomerDetail = {
   invoices: InvoiceSummary[];
 };
 
-const emptyForm = { name: "", phone: "", email: "", street: "", city: "", postalCode: "", provinceId: "" };
+const emptyForm = { name: "", phone: "", email: "", street: "", poBox: "", city: "", postalCode: "", provinceId: "" };
 type SortKey = "name-asc" | "name-desc" | "date-newest" | "date-oldest";
 
 function fmtDate(iso: string) {
@@ -88,6 +89,7 @@ export default function CustomersPage() {
         phone: form.phone || undefined,
         email: form.email || undefined,
         street: form.street || undefined,
+        poBox: form.poBox || undefined,
         city: form.city || undefined,
         postalCode: form.postalCode || undefined,
         provinceId: form.provinceId || undefined,
@@ -155,6 +157,7 @@ export default function CustomersPage() {
           <input placeholder="Phone" className="rounded border px-3 py-2" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <input placeholder="Email" className="rounded border px-3 py-2" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <input placeholder="Street address" className="rounded border px-3 py-2" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+          <input placeholder="PO Box (optional)" className="rounded border px-3 py-2" value={form.poBox} onChange={(e) => setForm({ ...form, poBox: e.target.value })} />
           <input placeholder="City" className="rounded border px-3 py-2" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           <input placeholder="Postal code" className="rounded border px-3 py-2" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} />
           <select required className="rounded border px-3 py-2" value={form.provinceId} onChange={(e) => setForm({ ...form, provinceId: e.target.value })}>

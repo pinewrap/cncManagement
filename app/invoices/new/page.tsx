@@ -13,6 +13,7 @@ type Customer = {
   phone: string | null;
   email: string | null;
   street: string | null;
+  poBox: string | null;
   city: string | null;
   postalCode: string | null;
   province: Province | null;
@@ -49,6 +50,7 @@ const emptyCustomerForm = {
   phone: "",
   email: "",
   street: "",
+  poBox: "",
   city: "",
   postalCode: "",
   provinceId: "",
@@ -63,6 +65,19 @@ function defaultDueDate(): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+// Adds exactly one month to a "YYYY-MM-DD" string, using local date parts
+// (not new Date(str) directly) to avoid the timezone-shift bug we hit
+// elsewhere — new Date(y, m-1, d) is local-time, not UTC.
+function addOneMonth(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setMonth(date.getMonth() + 1);
+  const yy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
 }
 
 function defaultTodayDate(): string {
@@ -89,6 +104,7 @@ export default function NewInvoicePage() {
   const [otherChargesAmount, setOtherChargesAmount] = useState("");
   const [dueDate, setDueDate] = useState(defaultDueDate());
   const [invoiceDate, setInvoiceDate] = useState(defaultTodayDate());
+  const [dueDateTouched, setDueDateTouched] = useState(false);
   const [footerNote, setFooterNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -105,6 +121,19 @@ export default function NewInvoicePage() {
       (c) => c.name.toLowerCase().includes(q) || c.phone?.includes(q) || c.email?.toLowerCase().includes(q)
     );
   }, [customerSearch, customers]);
+  
+
+  function handleInvoiceDateChange(newDate: string) {
+    setInvoiceDate(newDate);
+    if (!dueDateTouched) {
+      setDueDate(addOneMonth(newDate));
+    }
+  }
+
+function handleDueDateChange(newDate: string) {
+    setDueDate(newDate);
+    setDueDateTouched(true);
+  }
 
   function updateLine(index: number, patch: Partial<LineItem>) {
     setLineItems((items) => items.map((item, i) => (i === index ? { ...item, ...patch } : item)));
@@ -136,6 +165,7 @@ export default function NewInvoicePage() {
         phone: customerForm.phone || undefined,
         email: customerForm.email || undefined,
         street: customerForm.street || undefined,
+        poBox: customerForm.poBox || undefined,
         city: customerForm.city || undefined,
         postalCode: customerForm.postalCode || undefined,
         provinceId: customerForm.provinceId || undefined,
@@ -268,9 +298,9 @@ export default function NewInvoicePage() {
             <div>
               <div className="font-medium">{selectedCustomer.name}</div>
               <div className="text-gray-500">
-                {[selectedCustomer.street, selectedCustomer.city, selectedCustomer.province?.province]
-                  .filter(Boolean)
-                  .join(", ")}
+                {[selectedCustomer.street, selectedCustomer.poBox, selectedCustomer.city, selectedCustomer.province?.province]
+                .filter(Boolean)
+                .join(", ")}
               </div>
             </div>
             <button className="text-brand-navy underline" onClick={() => setSelectedCustomer(null)}>
@@ -335,6 +365,12 @@ export default function NewInvoicePage() {
                   onChange={(e) => setCustomerForm({ ...customerForm, street: e.target.value })}
                 />
                 <input
+                  placeholder="PO Box (optional)"
+                  className="rounded border px-3 py-2"
+                  value={customerForm.poBox}
+                  onChange={(e) => setCustomerForm({ ...customerForm, poBox: e.target.value })}
+                />
+                <input
                   placeholder="City"
                   className="rounded border px-3 py-2"
                   value={customerForm.city}
@@ -379,7 +415,7 @@ export default function NewInvoicePage() {
             type="date"
             className="rounded border px-3 py-2 text-sm"
             value={invoiceDate}
-            onChange={(e) => setInvoiceDate(e.target.value)}
+            onChange={(e) => handleInvoiceDateChange(e.target.value)}
           />
         </div>
         <div className="flex flex-col gap-3">
@@ -489,7 +525,7 @@ export default function NewInvoicePage() {
           placeholder="Due date"
           className="rounded border px-3 py-2"
           value={dueDate}
-          onChange={(e) => setDueDate(e.target.value)}
+          onChange={(e) => handleDueDateChange(e.target.value)}
         />
         <input
           placeholder="Additional footer note — optional (default clause always stays, this adds to it)"

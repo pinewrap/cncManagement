@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       phone: body.phone ?? null,
       email: body.email ?? null,
       street: body.street ?? null,
+      poBox: body.poBox ?? null,
       city: body.city ?? null,
       postalCode: body.postalCode ?? null,
       provinceId: body.provinceId ?? null,

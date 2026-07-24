@@ -7,6 +7,7 @@ type Province = { province: string; taxType: string; gstHstRate: string; pstQstR
 type Customer = {
   name: string;
   street?: string | null;
+  poBox?: string | null;
   city?: string | null;
   postalCode?: string | null;
   province?: Province | null;
@@ -110,6 +111,7 @@ export default function InvoicePreview({
             <>
               <div>{customer.name}</div>
               {customer.street && <div>{customer.street}</div>}
+              {customer.poBox && <div>PO Box {customer.poBox}</div>}
               {cityLine && <div>{cityLine}</div>}
             </>
           ) : (
@@ -217,17 +219,17 @@ export default function InvoicePreview({
           date format, column layout) is kept in sync with the real PDF. */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <div style={{ minWidth: 260, fontSize: 13 }}>
+          {otherChargesAmount > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+              <span style={{ color: gold }}>{(otherChargesLabel || "OTHER").toUpperCase()}</span>
+              <span>{money(otherChargesAmount)}</span>
+            </div>
+          )}
+
           <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
             <span style={{ color: gold, fontWeight: "bold" }}>SUBTOTAL</span>
             <span>{money(subtotal)}</span>
           </div>
-
-          {otherChargesAmount > 0 && (
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
-              <span style={{ color: gold, fontWeight: "bold" }}>{(otherChargesLabel || "OTHER").toUpperCase()}</span>
-              <span>{money(otherChargesAmount)}</span>
-            </div>
-          )}
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
             <span style={{ color: gold, fontWeight: "bold" }}>

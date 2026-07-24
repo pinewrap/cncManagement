@@ -4,23 +4,35 @@ import { invoiceTotals, nextInvoiceNumber, extractInvoiceNumber, taxLabel } from
 
 export async function GET(req: NextRequest) {
   const customerId = req.nextUrl.searchParams.get("customerId");
+  const status = req.nextUrl.searchParams.get("status"); // "PAID" | "UNPAID" | "PARTIAL" | null
+  const cursor = req.nextUrl.searchParams.get("cursor");
   const countOnly = req.nextUrl.searchParams.get("count") === "true";
-
+ 
   if (countOnly) {
     const count = await prisma.invoice.count();
     return NextResponse.json({ count });
   }
-
+ 
+  const take = 20;
+  const where: { customerId?: string; paymentStatus?: "PAID" | "UNPAID" | "PARTIAL" } = {};
+  if (customerId) where.customerId = customerId;
+  if (status && status !== "ALL") where.paymentStatus = status as "PAID" | "UNPAID" | "PARTIAL";
+ 
   const invoices = await prisma.invoice.findMany({
-    where: customerId ? { customerId } : undefined,
+    where,
     include: {
       customer: { include: { province: true } },
       lineItems: true,
     },
     orderBy: { createdAt: "desc" },
+    take: take + 1, // fetch one extra to know if there's a next page
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
-
-  const withTotals = invoices.map((invoice) => {
+ 
+  const hasMore = invoices.length > take;
+  const page = invoices.slice(0, take);
+ 
+  const withTotals = page.map((invoice) => {
     const rates = invoice.customer.province;
     const totals = invoiceTotals(
       invoice.lineItems,
@@ -34,8 +46,11 @@ export async function GET(req: NextRequest) {
       taxLabel: rates ? taxLabel(rates.taxType) : null,
     };
   });
-
-  return NextResponse.json(withTotals);
+ 
+  return NextResponse.json({
+    invoices: withTotals,
+    nextCursor: hasMore ? page[page.length - 1].id : null,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -51,6 +66,7 @@ export async function POST(req: NextRequest) {
     const created = await tx.invoice.create({
       data: {
         invoiceNumber: body.invoiceNumber?.trim() || nextInvoiceNumber(lastNumber),
+        invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : undefined,
         customerId: body.customerId,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,
         otherChargesLabel: body.otherChargesLabel ?? null,

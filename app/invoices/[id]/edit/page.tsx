@@ -21,6 +21,7 @@ type Customer = {
   phone: string | null;
   email: string | null;
   street: string | null;
+  poBox: string | null;
   city: string | null;
   postalCode: string | null;
   province: Province | null;
