@@ -122,7 +122,7 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
   const margin = 30;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(24);
+  doc.setFontSize(22);
   doc.setTextColor(gold);
   doc.text(title, pageWidth / 2, 46, { align: "center" });
 
