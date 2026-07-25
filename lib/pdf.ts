@@ -4,13 +4,13 @@ import { businessConfig } from "./business-config";
 
 export type InvoicePdfData = {
   invoiceNumber: string;
+  poNumber?: string | null;
   invoiceDate: string;
   dueDate: string | null;
   logoDataUrl?: string;
   customer: {
     name: string;
     street: string | null;
-    poBox: string | null;
     city: string | null;
     postalCode: string | null;
     province: { province: string } | null;
@@ -41,7 +41,6 @@ export type PackingSlipPdfData = {
   customer: {
     name: string;
     street: string | null;
-    poBox: string | null;
     city: string | null;
     postalCode: string | null;
     province: { province: string } | null;
@@ -53,7 +52,15 @@ export type PackingSlipPdfData = {
   }[];
 };
 
+// Always exactly 2 decimals — used ONLY for the grand total (Please Pay box
+// value and the final TOTAL AMOUNT line), per the client's request that
+// decimals should only be forced there, nowhere else.
 const money = (n: number) => n.toFixed(2);
+
+// Everything else (rate, line amount, subtotal, tax, other charges): drop
+// the trailing ".00" when the value is a whole number, otherwise show 2
+// decimals normally (40.5 -> "40.50", not "40.5").
+const smartMoney = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
 export function toDDMMYYYY(dateStr: string): string {
   const parts = dateStr.split("-");
@@ -64,13 +71,27 @@ export function toDDMMYYYY(dateStr: string): string {
   return dateStr;
 }
 
+/** Extracts the "YYYY-MM-DD" calendar date directly from a stored ISO
+ * datetime string, without ever constructing a Date object or calling any
+ * local-timezone method. This is the fix for a real bug: new Date(iso)
+ * .toLocaleDateString() converts to the browser's local timezone, which
+ * can roll a date back by a day whenever the stored UTC midnight falls on
+ * the previous day locally — true for any timezone behind UTC, including
+ * every Canadian timezone. Plain string slicing sidesteps that entirely. */
+export function isoToDateOnly(iso: string): string {
+  return iso.slice(0, 10);
+}
+
 export function extractNumericId(value: string): string {
   const match = value.match(/(\d+)\s*$/);
   return match ? match[1] : value;
 }
 
-export function invoiceFilename(invoiceNumber: string): string {
-  return `CNC-INV #${extractNumericId(invoiceNumber)}.pdf`;
+export function invoiceFilename(invoiceNumber: string, customerName: string): string {
+  // Strip characters that aren't safe in filenames (mainly a Windows
+  // concern: \ / : * ? " < > |), and collapse any resulting double spaces.
+  const safeName = customerName.replace(/[\\/:*?"<>|]/g, "").replace(/\s+/g, " ").trim();
+  return `#${extractNumericId(invoiceNumber)} ${safeName}.pdf`;
 }
 
 export function packingSlipFilename(reference?: string): string {
@@ -169,9 +190,9 @@ function computeTotalsBlockHeight(
 ): number {
   const rowH = 20;
   let h = 0;
-  h += rowH;
   if (data.otherChargesAmount) h += rowH;
-  h += rowH;
+  h += rowH; // subtotal
+  h += rowH; // tax
   if (data.pstQstAmount > 0 && data.pstQstRateDisplay) h += rowH;
   h += 20;
   h += 22;
@@ -218,17 +239,23 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
     y += 17;
   }
 
-  if (data.customer.poBox) {
-    doc.text(`PO Box ${data.customer.poBox}`, margin, y);
-    y += 17;
-  }
-
   const cityLine = [data.customer.city, data.customer.province?.province, data.customer.postalCode]
     .filter(Boolean)
     .join(", ");
   if (cityLine) {
     doc.text(cityLine, margin, y);
+    y += 17;
+  }
+
+  // PO Number — the customer's own purchase-order reference, shown only
+  // when provided. This is per-invoice, not part of the address.
+  if (data.poNumber) {
+    doc.setFont("helvetica", "bold");
+    doc.text(`PO #: ${data.poNumber}`, margin, y);
+    doc.setFont("helvetica", "normal");
     y += 4;
+  } else {
+    y -= 13; // keep spacing consistent whether or not a PO number is present
   }
 
   const boxPadding = 10;
@@ -309,7 +336,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
       item.activity,
       data.taxLabel ?? "",
       String(item.quantity),
-      money(item.unitPrice),
+      smartMoney(item.unitPrice),
       money(item.quantity * item.unitPrice),
     ]),
     styles: { fontSize: 13, textColor: navy },
@@ -362,10 +389,12 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   doc.setLineWidth(0.5);
   doc.line(margin, totalsY - 16, pageWidth - margin, totalsY - 16);
 
+  // Other Charges (freight/delivery) — above Subtotal, label not bold, per
+  // the client's request.
   if (data.otherChargesAmount) {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(gold);
-    doc.text((data.otherChargesLabel ?? "OTHER").toUpperCase(), labelX, totalsY);
+    doc.text(data.otherChargesLabel ?? "OTHER", labelX, totalsY);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(navy);
     doc.text(money(data.otherChargesAmount), valueX, totalsY, { align: "right" });
@@ -465,11 +494,6 @@ export function generatePackingSlipPdf(data: PackingSlipPdfData): jsPDF {
 
   if (data.customer.street) {
     doc.text(data.customer.street, margin, y);
-    y += 17;
-  }
-
-  if (data.customer.poBox) {
-    doc.text(`PO Box ${data.customer.poBox}`, margin, y);
     y += 17;
   }
 

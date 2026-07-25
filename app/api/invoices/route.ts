@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
     const created = await tx.invoice.create({
       data: {
         invoiceNumber: body.invoiceNumber?.trim() || nextInvoiceNumber(lastNumber),
+        poNumber: body.poNumber || null,
         invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : undefined,
         customerId: body.customerId,
         dueDate: body.dueDate ? new Date(body.dueDate) : null,

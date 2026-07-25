@@ -226,7 +226,7 @@ export default function EditInvoicePage() {
         })
       ),
     ]);
-    doc.save(invoiceFilename(invoice.invoiceNumber));
+    doc.save(invoiceFilename(invoice.invoiceNumber, invoice.customer.name));
 
     router.push("/invoices");
   }

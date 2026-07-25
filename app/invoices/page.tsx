@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { generateInvoicePdf, loadLogoDataUrl, invoiceFilename } from "@/lib/pdf";
+import { generateInvoicePdf, loadLogoDataUrl, invoiceFilename, isoToDateOnly, toDDMMYYYY } from "@/lib/pdf";
 import CustomerSearch from "@/components/CustomerSearch";
 
 type Customer = { id: string; name: string };
@@ -17,7 +17,6 @@ type InvoiceListItem = {
   customer: {
     name: string;
     street: string | null;
-    poBox: string | null;
     city: string | null;
     postalCode: string | null;
     province: { province: string; gstHstRate: string; pstQstRate: string } | null;
@@ -34,8 +33,7 @@ type InvoiceListItem = {
 type StatusFilter = "ALL" | "PAID" | "UNPAID";
 
 function fmtDate(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+  return toDDMMYYYY(isoToDateOnly(iso));
 }
 
 export default function InvoicesPage() {
@@ -142,8 +140,8 @@ export default function InvoicesPage() {
     const logoDataUrl = await loadLogoDataUrl();
     const doc = generateInvoicePdf({
       invoiceNumber: inv.invoiceNumber,
-      invoiceDate: new Date(inv.invoiceDate).toLocaleDateString("en-CA"),
-      dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString("en-CA") : null,
+      invoiceDate: isoToDateOnly(inv.invoiceDate),
+      dueDate: inv.dueDate ? isoToDateOnly(inv.dueDate) : null,
       logoDataUrl,
       customer: inv.customer,
       lineItems: inv.lineItems.map((li) => ({
@@ -167,7 +165,7 @@ export default function InvoicesPage() {
       total: inv.total,
       footerNote: inv.footerNote,
     });
-    doc.save(invoiceFilename(inv.invoiceNumber));
+    doc.save(invoiceFilename(inv.invoiceNumber, inv.customer.name));
   }
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId);

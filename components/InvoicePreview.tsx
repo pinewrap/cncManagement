@@ -7,7 +7,6 @@ type Province = { province: string; taxType: string; gstHstRate: string; pstQstR
 type Customer = {
   name: string;
   street?: string | null;
-  poBox?: string | null;
   city?: string | null;
   postalCode?: string | null;
   province?: Province | null;
@@ -21,6 +20,7 @@ type LineItemPreview = {
 
 type Props = {
   invoiceNumber?: string;
+  poNumber?: string;
   invoiceDate: string;
   dueDate: string;
   customer: Customer | null;
@@ -39,7 +39,11 @@ type Props = {
 
 const gold = businessConfig.colors.gold;
 const navy = businessConfig.colors.text;
+
+// Matches lib/pdf.ts exactly: grand total always shows 2 decimals, every
+// other number drops the trailing ".00" when it's a whole number.
 const money = (n: number) => n.toFixed(2);
+const smartMoney = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(2));
 
 const HR = ({ color = "#aaa", mt = 10, mb = 10 }: { color?: string; mt?: number; mb?: number }) => (
   <div style={{ borderTop: `1px solid ${color}`, marginTop: mt, marginBottom: mb }} />
@@ -47,6 +51,7 @@ const HR = ({ color = "#aaa", mt = 10, mb = 10 }: { color?: string; mt?: number;
 
 export default function InvoicePreview({
   invoiceNumber,
+  poNumber,
   invoiceDate,
   dueDate,
   customer,
@@ -66,8 +71,6 @@ export default function InvoicePreview({
     ? [customer.city, customer.province?.province, customer.postalCode].filter(Boolean).join(", ")
     : "";
 
-  // Default clause always stays; a typed note is appended after it, not a
-  // replacement — matches lib/pdf.ts exactly.
   const combinedFooterText = footerNote
     ? `${businessConfig.defaultFooterNote}\n${footerNote}`
     : businessConfig.defaultFooterNote;
@@ -77,7 +80,7 @@ export default function InvoicePreview({
       style={{ fontFamily: "Helvetica, Arial, sans-serif", color: navy, fontSize: 13 }}
       className="rounded-lg border bg-white p-8 shadow-sm"
     >
-      {/* ── Title — 18pt, matches the PDF's reduced size ── */}
+      {/* ── Title ── */}
       <div style={{ textAlign: "center", color: gold, fontSize: 18, fontWeight: "bold", marginBottom: 20 }}>
         INVOICE {invoiceNumber ? invoiceNumber : <span style={{ opacity: 0.45 }}>#PREVIEW</span>}
       </div>
@@ -111,8 +114,10 @@ export default function InvoicePreview({
             <>
               <div>{customer.name}</div>
               {customer.street && <div>{customer.street}</div>}
-              {customer.poBox && <div>PO Box {customer.poBox}</div>}
               {cityLine && <div>{cityLine}</div>}
+              {/* PO Number — the customer's own purchase-order reference,
+                  shown only when provided. Not part of the address. */}
+              {poNumber && <div style={{ fontWeight: "bold" }}>PO #: {poNumber}</div>}
             </>
           ) : (
             <div style={{ color: "#aaa", fontStyle: "italic" }}>No customer selected</div>
@@ -146,7 +151,7 @@ export default function InvoicePreview({
               {label}
             </div>
           ))}
-          {[toDDMMYYYY(invoiceDate), `CAD $${money(total)}`, dueDate ? toDDMMYYYY(dueDate) : "-"].map((val, i) => (
+          {[toDDMMYYYY(invoiceDate), `CAD$ ${money(total)}`, dueDate ? toDDMMYYYY(dueDate) : "-"].map((val, i) => (
             <div
               key={i}
               style={{
@@ -175,7 +180,7 @@ export default function InvoicePreview({
               <th
                 key={h}
                 style={{
-                  textAlign: "left",
+                  textAlign: h === "QTY" || h === "RATE" || h === "AMOUNT" ? "right" : "left",
                   padding: "6px 6px",
                   fontWeight: "bold",
                   fontSize: 13,
@@ -201,9 +206,9 @@ export default function InvoicePreview({
                 <td style={{ padding: "6px 6px" }}>{item.description}</td>
                 <td style={{ padding: "6px 6px" }}>{item.activity}</td>
                 <td style={{ padding: "6px 6px" }}>{taxLabel ?? ""}</td>
-                <td style={{ padding: "6px 6px" }}>{item.quantity}</td>
-                <td style={{ padding: "6px 6px" }}>{money(item.unitPrice)}</td>
-                <td style={{ padding: "6px 6px" }}>{money(item.quantity * item.unitPrice)}</td>
+                <td style={{ padding: "6px 6px", textAlign: "right" }}>{item.quantity}</td>
+                <td style={{ padding: "6px 6px", textAlign: "right" }}>{smartMoney(item.unitPrice)}</td>
+                <td style={{ padding: "6px 6px", textAlign: "right" }}>{money(item.quantity * item.unitPrice)}</td>
               </tr>
             ))
           )}
@@ -212,16 +217,12 @@ export default function InvoicePreview({
 
       <HR color="#111" mt={0} mb={12} />
 
-      {/* Note: this preview intentionally does NOT replicate the PDF's
-          bottom-of-page pinning for totals — that's a print-pagination
-          concept ("page break if it doesn't fit") that doesn't map onto a
-          scrolling HTML preview. Everything else (fonts, footer content,
-          date format, column layout) is kept in sync with the real PDF. */}
+      {/* ── Totals — Other Charges above Subtotal, not bold; matches pdf.ts ── */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <div style={{ minWidth: 260, fontSize: 13 }}>
           {otherChargesAmount > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
-              <span style={{ color: gold }}>{(otherChargesLabel || "OTHER").toUpperCase()}</span>
+              <span style={{ color: gold }}>{otherChargesLabel || "OTHER"}</span>
               <span>{money(otherChargesAmount)}</span>
             </div>
           )}

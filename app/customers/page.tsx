@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import CustomerSearch from "@/components/CustomerSearch";
-import { toDDMMYYYY } from "@/lib/pdf";
+import { toDDMMYYYY, isoToDateOnly } from "@/lib/pdf";
 
 type Province = { province: string; taxType: string };
 type Customer = {
@@ -11,7 +11,6 @@ type Customer = {
   phone: string | null;
   email: string | null;
   street: string | null;
-  poBox: string | null;
   city: string | null;
   postalCode: string | null;
   createdAt: string;
@@ -27,12 +26,11 @@ type CustomerDetail = {
   invoices: InvoiceSummary[];
 };
 
-const emptyForm = { name: "", phone: "", email: "", street: "", poBox: "", city: "", postalCode: "", provinceId: "" };
+const emptyForm = { name: "", phone: "", email: "", street: "", city: "", postalCode: "", provinceId: "" };
 type SortKey = "name-asc" | "name-desc" | "date-newest" | "date-oldest";
 
 function fmtDate(iso: string) {
-  const d = new Date(iso);
-  return `${String(d.getDate()).padStart(2, "0")}-${String(d.getMonth() + 1).padStart(2, "0")}-${d.getFullYear()}`;
+  return toDDMMYYYY(isoToDateOnly(iso));
 }
 
 export default function CustomersPage() {
@@ -45,6 +43,13 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [sort, setSort] = useState<SortKey>("name-asc");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Edit state — expands an inline form under the row being edited
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "", phone: "", email: "", street: "", city: "", postalCode: "", provinceId: "",
+  });
+  const [editSaving, setEditSaving] = useState(false);
 
   // Lookup panel state
   const [showLookup, setShowLookup] = useState(false);
@@ -89,7 +94,6 @@ export default function CustomersPage() {
         phone: form.phone || undefined,
         email: form.email || undefined,
         street: form.street || undefined,
-        poBox: form.poBox || undefined,
         city: form.city || undefined,
         postalCode: form.postalCode || undefined,
         provinceId: form.provinceId || undefined,
@@ -114,6 +118,45 @@ export default function CustomersPage() {
       return;
     }
     setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+  }
+
+  function startEdit(c: Customer) {
+    setEditForm({
+      name: c.name,
+      phone: c.phone ?? "",
+      email: c.email ?? "",
+      street: c.street ?? "",
+      city: c.city ?? "",
+      postalCode: c.postalCode ?? "",
+      provinceId: c.province?.province ?? "",
+    });
+    setEditingId(c.id);
+  }
+
+  async function submitEdit(id: string) {
+    setEditSaving(true);
+    const res = await fetch(`/api/customers/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editForm.name,
+        phone: editForm.phone || undefined,
+        email: editForm.email || undefined,
+        street: editForm.street || undefined,
+        city: editForm.city || undefined,
+        postalCode: editForm.postalCode || undefined,
+        provinceId: editForm.provinceId || undefined,
+      }),
+    });
+    if (!res.ok) {
+      setEditSaving(false);
+      alert("Couldn't save changes.");
+      return;
+    }
+    const updated = await res.json();
+    setCustomers((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    setEditSaving(false);
+    setEditingId(null);
   }
 
   async function handleLookup() {
@@ -157,7 +200,6 @@ export default function CustomersPage() {
           <input placeholder="Phone" className="rounded border px-3 py-2" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           <input placeholder="Email" className="rounded border px-3 py-2" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           <input placeholder="Street address" className="rounded border px-3 py-2" value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
-          <input placeholder="PO Box (optional)" className="rounded border px-3 py-2" value={form.poBox} onChange={(e) => setForm({ ...form, poBox: e.target.value })} />
           <input placeholder="City" className="rounded border px-3 py-2" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
           <input placeholder="Postal code" className="rounded border px-3 py-2" value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} />
           <select required className="rounded border px-3 py-2" value={form.provinceId} onChange={(e) => setForm({ ...form, provinceId: e.target.value })}>
@@ -331,21 +373,71 @@ export default function CustomersPage() {
           </thead>
           <tbody>
             {sorted.map((c) => (
-              <tr key={c.id} className="border-t">
-                <td className="p-3">{c.name}</td>
-                <td className="p-3 whitespace-nowrap text-gray-500">{c.phone ?? "—"}</td>
-                <td className="p-3">{c.city ?? "—"}</td>
-                <td className="p-3">{c.province?.province ?? "—"}</td>
-                <td className="p-3 text-right">
-                  <button
-                    disabled={deletingId === c.id}
-                    onClick={() => handleDelete(c)}
-                    className="text-xs text-red-600 underline disabled:opacity-50"
-                  >
-                    {deletingId === c.id ? "..." : "Delete"}
-                  </button>
-                </td>
-              </tr>
+              <Fragment key={c.id}>
+                <tr className="border-t">
+                  <td className="p-3">{c.name}</td>
+                  <td className="p-3 whitespace-nowrap text-gray-500">{c.phone ?? "—"}</td>
+                  <td className="p-3">{c.city ?? "—"}</td>
+                  <td className="p-3">{c.province?.province ?? "—"}</td>
+                  <td className="p-3 text-right">
+                    <div className="flex justify-end gap-3">
+                      <button
+                        onClick={() => (editingId === c.id ? setEditingId(null) : startEdit(c))}
+                        className="text-xs text-brand-navy underline"
+                      >
+                        {editingId === c.id ? "Cancel" : "Edit"}
+                      </button>
+                      <button
+                        disabled={deletingId === c.id}
+                        onClick={() => handleDelete(c)}
+                        className="text-xs text-red-600 underline disabled:opacity-50"
+                      >
+                        {deletingId === c.id ? "..." : "Delete"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {editingId === c.id && (
+                  <tr className="border-t bg-brand/5">
+                    <td colSpan={5} className="p-4">
+                      <form
+                        onSubmit={(e) => { e.preventDefault(); submitEdit(c.id); }}
+                        className="grid gap-2 sm:grid-cols-2"
+                      >
+                        <input required placeholder="Customer name" className="rounded border px-3 py-2"
+                          value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                        <input placeholder="Phone" className="rounded border px-3 py-2"
+                          value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                        <input placeholder="Email" className="rounded border px-3 py-2"
+                          value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+                        <input placeholder="Street address" className="rounded border px-3 py-2"
+                          value={editForm.street} onChange={(e) => setEditForm({ ...editForm, street: e.target.value })} />
+                        <input placeholder="City" className="rounded border px-3 py-2"
+                          value={editForm.city} onChange={(e) => setEditForm({ ...editForm, city: e.target.value })} />
+                        <input placeholder="Postal code" className="rounded border px-3 py-2"
+                          value={editForm.postalCode} onChange={(e) => setEditForm({ ...editForm, postalCode: e.target.value })} />
+                        <select required className="rounded border px-3 py-2"
+                          value={editForm.provinceId} onChange={(e) => setEditForm({ ...editForm, provinceId: e.target.value })}>
+                          <option value="">Select province...</option>
+                          {provinces.map((p) => (
+                            <option key={p.province} value={p.province}>{p.province} ({p.taxType})</option>
+                          ))}
+                        </select>
+                        <div className="flex gap-2 sm:col-span-2">
+                          <button type="submit" disabled={editSaving}
+                            className="rounded bg-brand px-3 py-2 text-sm text-brand-navy hover:opacity-90 disabled:opacity-50">
+                            {editSaving ? "Saving..." : "Save changes"}
+                          </button>
+                          <button type="button" onClick={() => setEditingId(null)}
+                            className="rounded border px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -98,7 +98,6 @@ model Customer {
   phone      String?
   email      String?
   street     String?
-  poBox      String?
   city       String?
   postalCode String?
   provinceId String?
@@ -120,6 +119,7 @@ model Invoice {
   id                 String        @id @default(cuid())
   invoiceNumber      String        @unique
   customerId         String
+  poNumber           String?
   customer           Customer      @relation(fields: [customerId], references: [id])
   invoiceDate        DateTime      @default(now())
   dueDate            DateTime?

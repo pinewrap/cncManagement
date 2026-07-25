@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { invoiceTotals, taxLabel as getTaxLabel, deriveActivity, deriveDescription, groupProductLines, packageLabel, comparePackageSizeDesc } from "@/lib/calculations";
-import { generateInvoicePdf, generatePackingSlipPdf, loadLogoDataUrl, invoiceFilename, packingSlipFilename } from "@/lib/pdf";
+import { generateInvoicePdf, generatePackingSlipPdf, loadLogoDataUrl, invoiceFilename, packingSlipFilename, isoToDateOnly } from "@/lib/pdf";
 import InvoicePreview from "@/components/InvoicePreview";
 
 type Province = { province: string; taxType: string; gstHstRate: string; pstQstRate: string };
@@ -13,7 +13,6 @@ type Customer = {
   phone: string | null;
   email: string | null;
   street: string | null;
-  poBox: string | null;
   city: string | null;
   postalCode: string | null;
   province: Province | null;
@@ -50,7 +49,6 @@ const emptyCustomerForm = {
   phone: "",
   email: "",
   street: "",
-  poBox: "",
   city: "",
   postalCode: "",
   provinceId: "",
@@ -100,6 +98,7 @@ export default function NewInvoicePage() {
 
   const [lineItems, setLineItems] = useState<LineItem[]>([{ ...emptyLine }]);
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [poNumber, setPoNumber] = useState("");
   const [otherChargesLabel, setOtherChargesLabel] = useState("");
   const [otherChargesAmount, setOtherChargesAmount] = useState("");
   const [dueDate, setDueDate] = useState(defaultDueDate());
@@ -121,7 +120,6 @@ export default function NewInvoicePage() {
       (c) => c.name.toLowerCase().includes(q) || c.phone?.includes(q) || c.email?.toLowerCase().includes(q)
     );
   }, [customerSearch, customers]);
-  
 
   function handleInvoiceDateChange(newDate: string) {
     setInvoiceDate(newDate);
@@ -130,7 +128,7 @@ export default function NewInvoicePage() {
     }
   }
 
-function handleDueDateChange(newDate: string) {
+  function handleDueDateChange(newDate: string) {
     setDueDate(newDate);
     setDueDateTouched(true);
   }
@@ -165,7 +163,6 @@ function handleDueDateChange(newDate: string) {
         phone: customerForm.phone || undefined,
         email: customerForm.email || undefined,
         street: customerForm.street || undefined,
-        poBox: customerForm.poBox || undefined,
         city: customerForm.city || undefined,
         postalCode: customerForm.postalCode || undefined,
         provinceId: customerForm.provinceId || undefined,
@@ -236,6 +233,7 @@ function handleDueDateChange(newDate: string) {
       body: JSON.stringify({
         customerId: selectedCustomer.id,
         invoiceNumber: invoiceNumber.trim() || undefined,
+        poNumber: poNumber.trim() || undefined,
         invoiceDate: invoiceDate || undefined,
         dueDate: dueDate || undefined,
         otherChargesLabel: otherChargesLabel || undefined,
@@ -258,8 +256,9 @@ function handleDueDateChange(newDate: string) {
       loadLogoDataUrl().then((logoDataUrl) =>
         generateInvoicePdf({
           invoiceNumber: invoice.invoiceNumber,
-          invoiceDate: new Date(invoice.invoiceDate).toLocaleDateString("en-CA"),
-          dueDate: invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString("en-CA") : null,
+          poNumber: invoice.poNumber,
+          invoiceDate: isoToDateOnly(invoice.invoiceDate),
+          dueDate: invoice.dueDate ? isoToDateOnly(invoice.dueDate) : null,
           logoDataUrl,
           customer: invoice.customer,
           lineItems: invoice.lineItems.map((li: any) => ({
@@ -281,7 +280,7 @@ function handleDueDateChange(newDate: string) {
         })
       ),
     ]);
-    doc.save(invoiceFilename(invoice.invoiceNumber));
+    doc.save(invoiceFilename(invoice.invoiceNumber, invoice.customer.name));
 
     router.push("/invoices");
   }
@@ -298,7 +297,7 @@ function handleDueDateChange(newDate: string) {
             <div>
               <div className="font-medium">{selectedCustomer.name}</div>
               <div className="text-gray-500">
-                {[selectedCustomer.street, selectedCustomer.poBox, selectedCustomer.city, selectedCustomer.province?.province]
+                {[selectedCustomer.street, selectedCustomer.city, selectedCustomer.province?.province]
                 .filter(Boolean)
                 .join(", ")}
               </div>
@@ -363,12 +362,6 @@ function handleDueDateChange(newDate: string) {
                   className="rounded border px-3 py-2"
                   value={customerForm.street}
                   onChange={(e) => setCustomerForm({ ...customerForm, street: e.target.value })}
-                />
-                <input
-                  placeholder="PO Box (optional)"
-                  className="rounded border px-3 py-2"
-                  value={customerForm.poBox}
-                  onChange={(e) => setCustomerForm({ ...customerForm, poBox: e.target.value })}
                 />
                 <input
                   placeholder="City"
@@ -502,9 +495,15 @@ function handleDueDateChange(newDate: string) {
       <section className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-2">
         <input
           placeholder="Invoice # — leave blank to auto-generate (e.g. CNC-INV 3017)"
-          className="rounded border px-3 py-2 sm:col-span-2"
+          className="rounded border px-3 py-2"
           value={invoiceNumber}
           onChange={(e) => setInvoiceNumber(e.target.value)}
+        />
+        <input
+          placeholder="PO # — customer's purchase order number (optional)"
+          className="rounded border px-3 py-2"
+          value={poNumber}
+          onChange={(e) => setPoNumber(e.target.value)}
         />
         <input
           placeholder="Other charge label (e.g. Freight) — optional"
@@ -573,6 +572,7 @@ function handleDueDateChange(newDate: string) {
         <div className="min-w-[600px]">
         <InvoicePreview
           invoiceNumber={invoiceNumber || undefined}
+          poNumber={poNumber || undefined}
           invoiceDate={invoiceDate}
           dueDate={dueDate}
           customer={selectedCustomer}
