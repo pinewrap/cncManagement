@@ -536,16 +536,16 @@ export default function NewInvoicePage() {
 
       {/* Live totals */}
       <section className="ml-auto w-full max-w-xs rounded-lg border bg-white p-4 text-sm">
-        <div className="flex justify-between py-1">
-          <span>Subtotal</span>
-          <span>${totals.subtotal.toFixed(2)}</span>
-        </div>
         {totals.otherChargesAmount > 0 && (
           <div className="flex justify-between py-1">
             <span>{otherChargesLabel || "Other"}</span>
             <span>${totals.otherChargesAmount.toFixed(2)}</span>
           </div>
         )}
+        <div className="flex justify-between py-1">
+          <span>Subtotal</span>
+          <span>${(totals.subtotal + totals.otherChargesAmount).toFixed(2)}</span>
+        </div>
         <div className="flex justify-between py-1">
           <span>{taxLabelDisplay ?? "Tax"}</span>
           <span>${totals.gstHstAmount.toFixed(2)}</span>

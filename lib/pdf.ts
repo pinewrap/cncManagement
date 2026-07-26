@@ -122,7 +122,7 @@ function drawBusinessHeader(doc: jsPDF, title: string, logoDataUrl: string | und
   const margin = 30;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
+  doc.setFontSize(24);
   doc.setTextColor(gold);
   doc.text(title, pageWidth / 2, 46, { align: "center" });
 
@@ -191,7 +191,7 @@ function computeTotalsBlockHeight(
   const rowH = 20;
   let h = 0;
   if (data.otherChargesAmount) h += rowH;
-  h += rowH; // subtotal
+  h += rowH; // subtotal (now includes other charges in its value, but is still its own row)
   h += rowH; // tax
   if (data.pstQstAmount > 0 && data.pstQstRateDisplay) h += rowH;
   h += 20;
@@ -389,8 +389,9 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   doc.setLineWidth(0.5);
   doc.line(margin, totalsY - 16, pageWidth - margin, totalsY - 16);
 
-  // Other Charges (freight/delivery) — above Subtotal, label not bold, per
-  // the client's request.
+  // Freight/delivery stays visible as its own line, but the SUBTOTAL value
+  // itself is now the combined figure (line items + freight) — tax is then
+  // calculated on that same combined subtotal below.
   if (data.otherChargesAmount) {
     doc.setFont("helvetica", "normal");
     doc.setTextColor(gold);
@@ -406,7 +407,7 @@ export function generateInvoicePdf(data: InvoicePdfData): jsPDF {
   doc.text("SUBTOTAL", labelX, totalsY);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(navy);
-  doc.text(money(data.subtotal), valueX, totalsY, { align: "right" });
+  doc.text(money(data.subtotal + data.otherChargesAmount), valueX, totalsY, { align: "right" });
   totalsY += 20;
 
   doc.setFont("helvetica", "bold");

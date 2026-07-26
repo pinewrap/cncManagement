@@ -229,7 +229,7 @@ export default function InvoicePreview({
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
             <span style={{ color: gold, fontWeight: "bold" }}>SUBTOTAL</span>
-            <span>{money(subtotal)}</span>
+            <span>{money(subtotal + otherChargesAmount)}</span>
           </div>
 
           <div style={{ display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
