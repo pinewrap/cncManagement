@@ -12,6 +12,37 @@ export async function GET(req: NextRequest) {
     const count = await prisma.invoice.count();
     return NextResponse.json({ count });
   }
+
+  // Add this right after the existing "if (countOnly) {...}" block, before
+  // the main paginated query. Aggregates the computed total across ALL
+  // matching invoices (not just one page) -- respects the same status/
+  // customerId filters as the regular list, so "unpaid for this customer"
+  // works too, not just "all unpaid".
+  const summaryStatus = req.nextUrl.searchParams.get("summary"); // "ALL" | "PAID" | "UNPAID" | "PARTIAL"
+  if (summaryStatus) {
+    const summaryWhere: { customerId?: string; paymentStatus?: "PAID" | "UNPAID" | "PARTIAL" } = {};
+    if (customerId) summaryWhere.customerId = customerId;
+    if (summaryStatus !== "ALL") summaryWhere.paymentStatus = summaryStatus as "PAID" | "UNPAID" | "PARTIAL";
+
+    const matching = await prisma.invoice.findMany({
+      where: summaryWhere,
+      include: { customer: { include: { province: true } }, lineItems: true },
+    });
+
+    let totalAmount = 0;
+    for (const invoice of matching) {
+      const rates = invoice.customer.province;
+      const totals = invoiceTotals(
+        invoice.lineItems,
+        rates?.gstHstRate ?? 0,
+        rates?.pstQstRate ?? 0,
+        invoice.otherChargesAmount
+      );
+      totalAmount += totals.total;
+    }
+
+    return NextResponse.json({ count: matching.length, totalAmount });
+  }
  
   const take = 20;
   const where: { customerId?: string; paymentStatus?: "PAID" | "UNPAID" | "PARTIAL" } = {};
